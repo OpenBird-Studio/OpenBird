@@ -1,0 +1,13 @@
+{
+  "name": "openbird",
+  "version": "1.0.0",
+  "description": "CLI tool to interact with local Ollama LLMs",
+  "type": "module",
+  "bin": {
+    "bird": "./bin/bird.js"
+  },
+  "scripts": {
+    "start": "node bin/bird.js",
+    "serve": "node bin/serve.js"
+  }
+}

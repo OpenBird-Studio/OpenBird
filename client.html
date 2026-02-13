@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenBird</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: #16213e;
+    border-bottom: 1px solid #0f3460;
+  }
+
+  header h1 { font-size: 1.2rem; color: #e94560; font-weight: 700; }
+
+  .header-controls { display: flex; align-items: center; gap: 10px; }
+
+  select, button {
+    font-family: inherit;
+    font-size: 0.85rem;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+
+  select:focus, button:focus { outline: 2px solid #e94560; outline-offset: -1px; }
+  button:hover { background: #0f3460; }
+  #clear-btn { color: #e94560; border-color: #e94560; }
+
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .message {
+    max-width: 75%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 0.95rem;
+  }
+
+  .message.user {
+    align-self: flex-end;
+    background: #0f3460;
+    border-bottom-right-radius: 4px;
+  }
+
+  .message.assistant {
+    align-self: flex-start;
+    background: #16213e;
+    border-bottom-left-radius: 4px;
+    border: 1px solid #0f3460;
+  }
+
+  .message .role {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    color: #e94560;
+  }
+
+  .message.user .role { color: #53d8fb; }
+
+  .message .timer {
+    font-size: 0.7rem;
+    color: #666;
+    margin-top: 6px;
+  }
+
+  #status {
+    text-align: center;
+    padding: 8px;
+    font-size: 0.8rem;
+    color: #888;
+    min-height: 30px;
+  }
+
+  #input-bar {
+    display: flex;
+    padding: 12px 20px;
+    gap: 10px;
+    background: #16213e;
+    border-top: 1px solid #0f3460;
+  }
+
+  #input {
+    flex: 1;
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 10px 14px;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    resize: none;
+    min-height: 44px;
+    max-height: 160px;
+  }
+
+  #input:focus { outline: 2px solid #e94560; outline-offset: -1px; }
+
+  #send-btn {
+    padding: 10px 20px;
+    background: #e94560;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  #send-btn:hover { background: #c73652; }
+  #send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .empty-state {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #555;
+    font-size: 1.1rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>OpenBird</h1>
+  <div class="header-controls">
+    <label for="model-select" style="font-size:.8rem;color:#888;">Model:</label>
+    <select id="model-select"><option>loading...</option></select>
+    <button id="clear-btn">Clear</button>
+  </div>
+</header>
+
+<div id="chat">
+  <div class="empty-state" id="empty">Send a message to start chatting</div>
+</div>
+
+<div id="status"></div>
+
+<div id="input-bar">
+  <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
+  <button id="send-btn">Send</button>
+</div>
+
+<script>
+const chatEl   = document.getElementById("chat");
+const inputEl  = document.getElementById("input");
+const sendBtn  = document.getElementById("send-btn");
+const clearBtn = document.getElementById("clear-btn");
+const modelSel = document.getElementById("model-select");
+const statusEl = document.getElementById("status");
+
+let generating = false;
+
+// --- Load models via bird --models ---
+async function loadModels() {
+  try {
+    const res = await fetch("/api/models");
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    modelSel.innerHTML = "";
+    data.models.forEach(name => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      modelSel.appendChild(opt);
+    });
+    statusEl.textContent = `Connected — ${data.models.length} model(s) available`;
+  } catch (e) {
+    modelSel.innerHTML = "<option>unavailable</option>";
+    statusEl.textContent = "Could not connect. Is Ollama running?";
+  }
+}
+
+// --- Render a chat bubble, returns the body element for streaming ---
+function addMessage(role, text) {
+  const empty = document.getElementById("empty");
+  if (empty) empty.remove();
+
+  const div = document.createElement("div");
+  div.className = `message ${role}`;
+
+  const label = document.createElement("div");
+  label.className = "role";
+  label.textContent = role === "user" ? "you" : "bird";
+  div.appendChild(label);
+
+  const body = document.createElement("div");
+  body.textContent = text;
+  div.appendChild(body);
+
+  let timerEl = null;
+  if (role === "assistant") {
+    timerEl = document.createElement("div");
+    timerEl.className = "timer";
+    div.appendChild(timerEl);
+  }
+
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return { body, timerEl };
+}
+
+// --- Send prompt to bird via the server ---
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text || generating) return;
+
+  generating = true;
+  sendBtn.disabled = true;
+  inputEl.value = "";
+  autoResize();
+
+  addMessage("user", text);
+  const { body: bodyEl, timerEl } = addMessage("assistant", "");
+  statusEl.textContent = "Generating...";
+
+  const startTime = performance.now();
+  let timerInterval = setInterval(() => {
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+    timerEl.textContent = `${elapsed}s`;
+  }, 100);
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: modelSel.value, prompt: text }),
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const json = JSON.parse(line.slice(6));
+        if (json.error) throw new Error(json.error);
+        if (json.done) break;
+        if (json.content) {
+          full += json.content;
+          bodyEl.textContent = full;
+          chatEl.scrollTop = chatEl.scrollHeight;
+        }
+      }
+    }
+
+    // Strip the leading "[model] " prefix bird prints in one-shot mode
+    const cleaned = full.replace(/^\[.*?\]\s*/, "");
+    bodyEl.textContent = cleaned;
+    clearInterval(timerInterval);
+    const totalSec = ((performance.now() - startTime) / 1000).toFixed(1);
+    timerEl.textContent = `${totalSec}s`;
+    statusEl.textContent = "";
+  } catch (e) {
+    bodyEl.textContent = "Error: " + e.message;
+    clearInterval(timerInterval);
+    timerEl.textContent = "";
+    statusEl.textContent = "";
+  }
+
+  generating = false;
+  sendBtn.disabled = false;
+  inputEl.focus();
+}
+
+// --- Auto-resize textarea ---
+function autoResize() {
+  inputEl.style.height = "auto";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + "px";
+}
+
+// --- Events ---
+sendBtn.addEventListener("click", send);
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+inputEl.addEventListener("input", autoResize);
+clearBtn.addEventListener("click", () => {
+  chatEl.innerHTML = '<div class="empty-state" id="empty">Send a message to start chatting</div>';
+  statusEl.textContent = "";
+});
+
+// --- Init ---
+loadModels();
+inputEl.focus();
+</script>
+</body>
+</html>
