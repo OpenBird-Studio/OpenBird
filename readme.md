@@ -1,0 +1,1 @@
+We create open AI tools that run on hardware real people can afford, breaking the monopoly on intelligence before it locks in. No one should need a billion-dollar budget to compete. OpenBird isn't just a company, it's a fight to prevent an AI underclass before it's too late.
