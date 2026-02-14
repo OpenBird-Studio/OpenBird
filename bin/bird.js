@@ -18,6 +18,14 @@ Environment:
   BIRD_MODEL     Default model (default: llama3.2:latest)
 `.trim();
 
+const SYSTEM_PROMPT = {
+  role: "system",
+  content:
+    "You are Bird, a concise and helpful assistant. " +
+    "When your response includes a shell command, put exactly one command in a single fenced code block (```). " +
+    "Keep all explanation outside the code block. Never use more than one code block.",
+};
+
 function parseArgs(argv) {
   const args = argv.slice(2);
   const opts = { model: process.env.BIRD_MODEL || "llama3.2:latest", prompt: null };
@@ -49,7 +57,7 @@ function parseArgs(argv) {
 }
 
 async function oneShot(model, prompt) {
-  const messages = [{ role: "user", content: prompt }];
+  const messages = [SYSTEM_PROMPT, { role: "user", content: prompt }];
   process.stdout.write(`\x1b[36m[${model}]\x1b[0m `);
   await chat(model, messages, (chunk) => process.stdout.write(chunk));
   process.stdout.write("\n");
@@ -61,7 +69,7 @@ async function interactive(model) {
     output: process.stdout,
   });
 
-  const messages = [];
+  const messages = [SYSTEM_PROMPT];
   console.log(`\x1b[36mbird\x1b[0m connected to \x1b[33m${model}\x1b[0m`);
   console.log(`Type your message. Use /quit to exit, /clear to reset, /model <name> to switch.\n`);
 
@@ -78,7 +86,7 @@ async function interactive(model) {
     }
 
     if (input === "/clear") {
-      messages.length = 0;
+      messages.length = 1; // keep SYSTEM_PROMPT
       console.log("Chat history cleared.\n");
       return prompt();
     }
