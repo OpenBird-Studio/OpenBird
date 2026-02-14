@@ -10,9 +10,12 @@
 <body>
 
 <header>
-  <h1>OpenBird</h1>
+  <div class="logo">
+    <img src="/bird.png" alt="OpenBird" class="logo-img">
+    <h1>OpenBird</h1>
+  </div>
   <div class="header-controls">
-    <label for="model-select" style="font-size:.8rem;color:#888;">Model:</label>
+    <label for="model-select" style="font-size:.8rem;color:#7f8c8d;">Model:</label>
     <select id="model-select"><option>loading...</option></select>
     <button id="clear-btn">Clear</button>
   </div>
@@ -52,6 +55,8 @@ async function loadModels() {
       opt.textContent = name;
       modelSel.appendChild(opt);
     });
+    const saved = localStorage.getItem("openbird-model");
+    if (saved && data.models.includes(saved)) modelSel.value = saved;
     statusEl.textContent = `Connected — ${data.models.length} model(s) available`;
   } catch (e) {
     modelSel.innerHTML = "<option>unavailable</option>";
@@ -308,6 +313,10 @@ inputEl.addEventListener("input", autoResize);
 clearBtn.addEventListener("click", () => {
   chatEl.innerHTML = '<div class="empty-state" id="empty">Send a message to start chatting</div>';
   statusEl.textContent = "";
+});
+
+modelSel.addEventListener("change", () => {
+  localStorage.setItem("openbird-model", modelSel.value);
 });
 
 // --- Init ---

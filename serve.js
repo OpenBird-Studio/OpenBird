@@ -9,8 +9,9 @@ import { handler as runHandler } from "./routes/run.js";
 const PORT = process.env.PORT || 3000;
 
 const server = http.createServer(async (req, res) => {
-  if (req.method === "GET" && (req.url === "/" || req.url === "/index.html" || req.url === "/style.css")) {
-    return staticHandler(req, res);
+  if (req.method === "GET" && !req.url.startsWith("/api/")) {
+    const handled = staticHandler(req, res);
+    if (handled) return;
   }
 
   if (req.method === "GET" && req.url === "/api/models") {
