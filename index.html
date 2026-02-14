@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenBird</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -41,6 +43,33 @@ const modelSel = document.getElementById("model-select");
 const statusEl = document.getElementById("status");
 
 let generating = false;
+
+// --- Markdown + math rendering ---
+function renderMd(text) {
+  // Protect math blocks from marked before parsing
+  const blocks = [];
+  const push = (display, tex) => {
+    blocks.push({ display, tex: tex.trim() });
+    return `\x00MATH${blocks.length - 1}\x00`;
+  };
+  // Display: $$...$$ and \[...\]
+  let s = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => push(true, m));
+  s = s.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => push(true, m));
+  // Inline: $...$ and \(...\)
+  s = s.replace(/\$([^\$\n]+?)\$/g, (_, m) => push(false, m));
+  s = s.replace(/\\\((.+?)\\\)/g, (_, m) => push(false, m));
+
+  let html = marked.parse(s);
+
+  // Replace placeholders with rendered KaTeX
+  html = html.replace(/\x00MATH(\d+)\x00/g, (_, i) => {
+    const { display, tex } = blocks[Number(i)];
+    try {
+      return katex.renderToString(tex, { displayMode: display, throwOnError: false });
+    } catch { return tex; }
+  });
+  return html;
+}
 
 // --- Load models via bird --models ---
 async function loadModels() {
@@ -155,14 +184,14 @@ async function send() {
         if (json.content) {
           full += json.content;
           bodyEl.className = "md-body";
-          bodyEl.innerHTML = marked.parse(full);
+          bodyEl.innerHTML = renderMd(full);
           chatEl.scrollTop = chatEl.scrollHeight;
         }
       }
     }
 
     const { info, commands } = parseResponse(full);
-    bodyEl.innerHTML = marked.parse(info);
+    bodyEl.innerHTML = renderMd(info);
 
     for (const cmd of commands) {
       const block = document.createElement("div");
