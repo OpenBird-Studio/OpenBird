@@ -88,6 +88,12 @@ button:hover { background: #0f3460; }
   margin-top: 6px;
 }
 
+.message .metrics {
+  font-size: 0.7rem;
+  color: #555;
+  margin-top: 2px;
+}
+
 /* --- Command block --- */
 
 .message .command-block {
@@ -112,7 +118,10 @@ button:hover { background: #0f3460; }
   letter-spacing: 0.5px;
 }
 
-.command-block .command-copy {
+.command-block .command-buttons { display: flex; gap: 6px; }
+
+.command-block .command-copy,
+.command-block .command-run {
   font-size: 0.7rem;
   padding: 2px 8px;
   background: transparent;
@@ -122,7 +131,29 @@ button:hover { background: #0f3460; }
   cursor: pointer;
 }
 
-.command-block .command-copy:hover { color: #e0e0e0; border-color: #555; }
+.command-block .command-copy:hover,
+.command-block .command-run:hover { color: #e0e0e0; border-color: #555; }
+
+.command-block .command-run { color: #7ee787; border-color: #3a5a3a; }
+.command-block .command-run:hover { border-color: #7ee787; }
+.command-block .command-run:disabled { opacity: 0.6; cursor: not-allowed; }
+.command-block .command-run.success { color: #7ee787; border-color: #7ee787; }
+.command-block .command-run.failure { color: #e94560; border-color: #e94560; }
+
+.command-block .command-output {
+  padding: 10px 14px;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.8rem;
+  color: #c9d1d9;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.5;
+  border-top: 1px solid #21262d;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.command-output .stderr { color: #e94560; }
 
 .command-block .command-body {
   padding: 10px 14px;

@@ -1,8 +1,5 @@
-import * as path from "node:path";
-import { spawn } from "node:child_process";
+import { chat } from "../lib/ollama.js";
 import { readBody } from "../lib/http.js";
-
-const BIRD = path.resolve(import.meta.dirname, "..", "bin", "bird.js");
 
 export async function handler(req, res) {
   let body;
@@ -21,28 +18,23 @@ export async function handler(req, res) {
     return;
   }
 
-  const args = [BIRD, "-m", model, prompt];
-
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
   });
 
-  const proc = spawn("node", args);
+  const messages = [{ role: "user", content: prompt }];
 
-  proc.stdout.on("data", (data) => {
-    res.write(`data: ${JSON.stringify({ content: data.toString() })}\n\n`);
-  });
+  try {
+    const { metrics } = await chat(model, messages, (chunk) => {
+      res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+    });
+    res.write(`data: ${JSON.stringify({ done: true, metrics })}\n\n`);
+  } catch (e) {
+    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+  }
 
-  proc.stderr.on("data", (data) => {
-    res.write(`data: ${JSON.stringify({ error: data.toString() })}\n\n`);
-  });
-
-  proc.on("close", () => {
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-    res.end();
-  });
-
-  req.on("close", () => proc.kill());
+  res.end();
+  req.on("close", () => res.end());
 }

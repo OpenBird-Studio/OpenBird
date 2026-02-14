@@ -128,6 +128,7 @@ async function send() {
     const decoder = new TextDecoder();
     let full = "";
     let buffer = "";
+    let metrics = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -141,19 +142,20 @@ async function send() {
         if (!line.startsWith("data: ")) continue;
         const json = JSON.parse(line.slice(6));
         if (json.error) throw new Error(json.error);
-        if (json.done) break;
+        if (json.done) {
+          metrics = json.metrics || null;
+          break;
+        }
         if (json.content) {
           full += json.content;
-          bodyEl.textContent = full;
+          bodyEl.className = "md-body";
+          bodyEl.innerHTML = marked.parse(full);
           chatEl.scrollTop = chatEl.scrollHeight;
         }
       }
     }
 
-    // Strip the leading "[model] " prefix bird prints in one-shot mode
-    const cleaned = full.replace(/^\[.*?\]\s*/, "");
-    const { info, command } = parseResponse(cleaned);
-    bodyEl.className = "md-body";
+    const { info, command } = parseResponse(full);
     bodyEl.innerHTML = marked.parse(info);
 
     if (command) {
@@ -164,6 +166,9 @@ async function send() {
       header.className = "command-header";
       header.textContent = "command";
 
+      const btnGroup = document.createElement("div");
+      btnGroup.className = "command-buttons";
+
       const copyBtn = document.createElement("button");
       copyBtn.className = "command-copy";
       copyBtn.textContent = "copy";
@@ -172,7 +177,15 @@ async function send() {
         copyBtn.textContent = "copied!";
         setTimeout(() => copyBtn.textContent = "copy", 1500);
       });
-      header.appendChild(copyBtn);
+
+      const runBtn = document.createElement("button");
+      runBtn.className = "command-run";
+      runBtn.textContent = "run";
+      runBtn.addEventListener("click", () => runCommand(command, block, runBtn));
+
+      btnGroup.appendChild(copyBtn);
+      btnGroup.appendChild(runBtn);
+      header.appendChild(btnGroup);
 
       const cmdBody = document.createElement("div");
       cmdBody.className = "command-body";
@@ -186,6 +199,27 @@ async function send() {
     clearInterval(timerInterval);
     const totalSec = ((performance.now() - startTime) / 1000).toFixed(1);
     timerEl.textContent = `${totalSec}s`;
+
+    if (metrics) {
+      const metricsEl = document.createElement("div");
+      metricsEl.className = "metrics";
+      const parts = [];
+      if (metrics.eval_count != null)
+        parts.push(`${metrics.eval_count} tokens`);
+      if (metrics.eval_count && metrics.eval_duration)
+        parts.push(`${(metrics.eval_count / (metrics.eval_duration / 1e9)).toFixed(1)} tok/s`);
+      if (metrics.prompt_eval_count != null)
+        parts.push(`${metrics.prompt_eval_count} prompt tokens`);
+      if (metrics.prompt_eval_count && metrics.prompt_eval_duration)
+        parts.push(`${(metrics.prompt_eval_count / (metrics.prompt_eval_duration / 1e9)).toFixed(1)} prompt tok/s`);
+      if (metrics.total_duration)
+        parts.push(`${(metrics.total_duration / 1e9).toFixed(2)}s total`);
+      if (metrics.load_duration)
+        parts.push(`${(metrics.load_duration / 1e9).toFixed(2)}s load`);
+      metricsEl.textContent = parts.join(" · ");
+      msgDiv.appendChild(metricsEl);
+    }
+
     statusEl.textContent = "";
     chatEl.scrollTop = chatEl.scrollHeight;
   } catch (e) {
@@ -198,6 +232,64 @@ async function send() {
   generating = false;
   sendBtn.disabled = false;
   inputEl.focus();
+}
+
+// --- Run a command via /api/run ---
+async function runCommand(command, block, runBtn) {
+  runBtn.disabled = true;
+  runBtn.textContent = "running...";
+
+  // Remove previous output if re-running
+  const prev = block.querySelector(".command-output");
+  if (prev) prev.remove();
+
+  const output = document.createElement("div");
+  output.className = "command-output";
+  block.appendChild(output);
+  chatEl.scrollTop = chatEl.scrollHeight;
+
+  try {
+    const res = await fetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command }),
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const json = JSON.parse(line.slice(6));
+
+        if (json.type === "stdout") {
+          output.textContent += json.data;
+        } else if (json.type === "stderr") {
+          const span = document.createElement("span");
+          span.className = "stderr";
+          span.textContent = json.data;
+          output.appendChild(span);
+        } else if (json.type === "exit") {
+          runBtn.textContent = json.code === 0 ? "ran" : `exit ${json.code}`;
+          runBtn.className = json.code === 0 ? "command-run success" : "command-run failure";
+        }
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+    }
+  } catch (e) {
+    output.textContent = "Error: " + e.message;
+  }
+
+  runBtn.disabled = false;
 }
 
 // --- Auto-resize textarea ---

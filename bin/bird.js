@@ -59,8 +59,12 @@ function parseArgs(argv) {
 async function oneShot(model, prompt) {
   const messages = [SYSTEM_PROMPT, { role: "user", content: prompt }];
   process.stdout.write(`\x1b[36m[${model}]\x1b[0m `);
-  await chat(model, messages, (chunk) => process.stdout.write(chunk));
+  const { metrics } = await chat(model, messages, (chunk) => process.stdout.write(chunk));
   process.stdout.write("\n");
+  if (metrics?.eval_count && metrics?.eval_duration) {
+    const tokSec = (metrics.eval_count / (metrics.eval_duration / 1e9)).toFixed(1);
+    process.stderr.write(`\x1b[90m${metrics.eval_count} tokens · ${tokSec} tok/s\x1b[0m\n`);
+  }
 }
 
 async function interactive(model) {
@@ -107,9 +111,13 @@ async function interactive(model) {
     process.stdout.write(`\x1b[36mbird>\x1b[0m `);
 
     try {
-      const response = await chat(model, messages, (chunk) =>
+      const { response, metrics } = await chat(model, messages, (chunk) =>
         process.stdout.write(chunk)
       );
+      if (metrics?.eval_count && metrics?.eval_duration) {
+        const tokSec = (metrics.eval_count / (metrics.eval_duration / 1e9)).toFixed(1);
+        process.stdout.write(`\n\x1b[90m${metrics.eval_count} tokens · ${tokSec} tok/s\x1b[0m`);
+      }
       process.stdout.write("\n\n");
       messages.push({ role: "assistant", content: response });
     } catch (err) {
