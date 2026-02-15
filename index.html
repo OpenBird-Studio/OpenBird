@@ -99,8 +99,8 @@ async function loadModels() {
 // --- Parse response into info text and commands ---
 function parseResponse(text) {
   const commands = [];
-  const info = text.replace(/```(?:\w*)\n([\s\S]*?)```/g, (_, code) => {
-    commands.push({ action: code.trim() });
+  const info = text.replace(/```(?:bash|sh|shell)[ \t]*\n([\s\S]*?)```/gi, (_, code) => {
+    commands.push({ action: code.trim().replace(/^\$\s+/gm, "") });
     return "";
   }).trim();
   return { info, commands };

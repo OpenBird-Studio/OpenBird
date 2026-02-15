@@ -1,6 +1,16 @@
 import { chat } from "../lib/ollama.js";
 import { readBody } from "../lib/http.js";
 
+const SYSTEM_PROMPT = {
+  role: "system",
+  content:
+    "You are Bird, a concise and helpful assistant. " +
+    "When you suggest a shell command the user should run, put it in a fenced code block tagged with `bash` — one command per block, never combine commands with && or ;. " +
+    "The user's interface makes each bash code block individually runnable, so splitting them is essential. " +
+    "Use other language tags (python, javascript, etc.) for non-runnable code examples. " +
+    "Keep all explanation outside the code blocks.",
+};
+
 export async function handler(req, res) {
   let body;
   try {
@@ -25,7 +35,8 @@ export async function handler(req, res) {
   });
 
   try {
-    const { metrics } = await chat(model, messages, (chunk) => {
+    const fullMessages = [SYSTEM_PROMPT, ...messages];
+    const { metrics } = await chat(model, fullMessages, (chunk) => {
       res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
     });
     res.write(`data: ${JSON.stringify({ done: true, metrics })}\n\n`);
