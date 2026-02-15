@@ -25,3 +25,8 @@ If the connection is refused, allow port 3000 through your firewall:
 ```bash
 sudo ufw allow 3000
 ```
+
+### Cloudflare Tunnel
+```bash
+cloudflared tunnel --url http://localhost:3000
+```
