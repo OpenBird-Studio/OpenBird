@@ -15,7 +15,7 @@ const SYSTEM_PROMPT = {
     "If the user's message is purely conversational or informational and needs no command, respond normally with NO code block. " +
     "If asked to continue after a command result, evaluate whether the task is complete. " +
     "If more work is needed, return the next single command in a ```bash block. " +
-    "If the task is done, say so with no code block.",
+    "If the task is done, summarize what you found or what was accomplished — answer the user's original question directly using the command output (e.g. 'Yes, Docker is running with 3 active containers' or 'Disk usage is at 74% on /dev/sda1'). Be specific with real data from the output. No code block when done.",
 };
 
 export async function handler(req, res) {
