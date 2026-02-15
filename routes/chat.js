@@ -11,10 +11,10 @@ export async function handler(req, res) {
     return;
   }
 
-  const { model, prompt } = body;
-  if (!model || !prompt) {
+  const { model, messages } = body;
+  if (!model || !Array.isArray(messages) || messages.length === 0) {
     res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "model and prompt are required" }));
+    res.end(JSON.stringify({ error: "model and messages are required" }));
     return;
   }
 
@@ -23,8 +23,6 @@ export async function handler(req, res) {
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
   });
-
-  const messages = [{ role: "user", content: prompt }];
 
   try {
     const { metrics } = await chat(model, messages, (chunk) => {

@@ -21,6 +21,7 @@
     <label for="model-select" style="font-size:.8rem;color:#7f8c8d;">Model:</label>
     <select id="model-select"><option>loading...</option></select>
     <button id="clear-btn">Clear</button>
+    <button onclick="location.href='/terminal'" style="color:#27ae60;border-color:#a9dfbf;">Terminal</button>
   </div>
 </header>
 
@@ -44,6 +45,7 @@ const modelSel = document.getElementById("model-select");
 const statusEl = document.getElementById("status");
 
 let generating = false;
+let conversationHistory = [];
 
 // --- Markdown + math rendering ---
 function renderMd(text) {
@@ -144,6 +146,8 @@ async function send() {
   autoResize();
 
   addMessage("user", text);
+  conversationHistory.push({ role: "user", content: text });
+
   const { container: msgDiv, body: bodyEl, timerEl } = addMessage("assistant", "");
   statusEl.textContent = "Generating...";
 
@@ -157,7 +161,7 @@ async function send() {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: modelSel.value, prompt: text }),
+      body: JSON.stringify({ model: modelSel.value, messages: [...conversationHistory] }),
     });
 
     const reader = res.body.getReader();
@@ -190,6 +194,8 @@ async function send() {
         }
       }
     }
+
+    conversationHistory.push({ role: "assistant", content: full });
 
     const { info, commands } = parseResponse(full);
     bodyEl.innerHTML = renderMd(info);
@@ -343,6 +349,7 @@ inputEl.addEventListener("input", autoResize);
 clearBtn.addEventListener("click", () => {
   chatEl.innerHTML = '<div class="empty-state" id="empty">Send a message to start chatting</div>';
   statusEl.textContent = "";
+  conversationHistory = [];
 });
 
 modelSel.addEventListener("change", () => {

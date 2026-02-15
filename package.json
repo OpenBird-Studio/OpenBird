@@ -10,5 +10,9 @@
     "start": "node bin/bird.js",
     "serve": "node serve.js",
     "test": "node --test 'test/**/*.test.js'"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0",
+    "ws": "^8.18.0"
   }
 }

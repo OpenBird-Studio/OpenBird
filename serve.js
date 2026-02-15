@@ -5,6 +5,7 @@ import { handler as staticHandler } from "./routes/static.js";
 import { handler as modelsHandler } from "./routes/models.js";
 import { handler as chatHandler } from "./routes/chat.js";
 import { handler as runHandler } from "./routes/run.js";
+import { attachTerminal } from "./routes/terminal.js";
 
 const PORT = process.env.PORT || 3000;
 
@@ -29,6 +30,8 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404);
   res.end("Not found");
 });
+
+attachTerminal(server);
 
 server.listen(PORT, () => {
   console.log(`openbird web UI running at http://localhost:${PORT}`);
