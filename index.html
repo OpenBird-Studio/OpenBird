@@ -267,7 +267,19 @@ async function streamBirdResponse() {
       const runBtn = document.createElement("button");
       runBtn.className = "command-run";
       runBtn.textContent = "run";
-      runBtn.addEventListener("click", () => runCommand(cmd.action, block, runBtn));
+      runBtn.addEventListener("click", async () => {
+        generating = true;
+        sendBtn.disabled = true;
+        await runCommand(cmd.action, block, runBtn);
+        // Send command output back to AI as a new turn
+        const { commands: newCmds } = await streamBirdResponse();
+        // If auto-run is on, continue the loop with any new commands
+        if (autoRunCb.checked && newCmds.length > 0) {
+          await autoRunLoop(newCmds);
+        }
+        generating = false;
+        sendBtn.disabled = false;
+      });
 
       btnGroup.appendChild(copyBtn);
       btnGroup.appendChild(runBtn);
@@ -339,12 +351,8 @@ async function autoRunLoop(commands) {
     // Check if auto-run was toggled off during execution
     if (!autoRunCb.checked) break;
 
-    // Ask the AI if we need another command
-    conversationHistory.push({
-      role: "user",
-      content: "Command executed. Based on the output, do we need another command to finish the task? If yes, provide the next command. If the task is complete, confirm it with no code block.",
-    });
-
+    // Command result is already in conversationHistory from runCommand()
+    // Ask AI for next step
     const result = await streamBirdResponse();
     currentCommands = result.commands;
   }
