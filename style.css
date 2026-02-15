@@ -30,6 +30,57 @@ header h1 { font-size: 2rem; color: #3498db; font-weight: 700; }
 
 .header-controls { display: flex; align-items: center; gap: 10px; }
 
+/* --- Auto-run toggle --- */
+
+.auto-run-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auto-run-toggle input { display: none; }
+
+.toggle-slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: #bdd5ea;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.toggle-slider::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.auto-run-toggle input:checked + .toggle-slider {
+  background: #27ae60;
+}
+
+.auto-run-toggle input:checked + .toggle-slider::after {
+  transform: translateX(16px);
+}
+
+.toggle-label {
+  font-size: 0.8rem;
+  color: #7f8c8d;
+  font-weight: 600;
+}
+
+.auto-run-toggle input:checked ~ .toggle-label {
+  color: #27ae60;
+}
+
 select, button {
   font-family: inherit;
   font-size: 0.85rem;

@@ -20,6 +20,11 @@
   <div class="header-controls">
     <label for="model-select" style="font-size:.8rem;color:#7f8c8d;">Model:</label>
     <select id="model-select"><option>loading...</option></select>
+    <label class="auto-run-toggle">
+      <input type="checkbox" id="auto-run-cb">
+      <span class="toggle-slider"></span>
+      <span class="toggle-label">Auto</span>
+    </label>
     <button id="clear-btn">Clear</button>
     <button onclick="location.href='/terminal'" style="color:#27ae60;border-color:#a9dfbf;">Terminal</button>
   </div>
@@ -46,6 +51,13 @@ const statusEl = document.getElementById("status");
 
 let generating = false;
 let conversationHistory = [];
+const autoRunCb = document.getElementById("auto-run-cb");
+
+// Persist auto-run preference
+autoRunCb.checked = localStorage.getItem("openbird-autorun") === "true";
+autoRunCb.addEventListener("change", () => {
+  localStorage.setItem("openbird-autorun", autoRunCb.checked);
+});
 
 // --- Markdown + math rendering ---
 function renderMd(text) {
@@ -103,6 +115,21 @@ function parseResponse(text) {
     commands.push({ action: code.trim().replace(/^\$\s+/gm, "") });
     return "";
   }).trim();
+
+  // Fallback: detect bare commands when AI skips the code block
+  if (commands.length === 0 && info) {
+    const lines = info.split("\n").map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 2) {
+      const candidate = lines[lines.length - 1];
+      // Short, starts lowercase or with ./ or /, doesn't end with sentence punctuation
+      if (candidate.length < 200 && /^[a-z.\/]/.test(candidate) && !/[.!?:,]$/.test(candidate)) {
+        commands.push({ action: candidate });
+        const remaining = lines.length > 1 ? lines.slice(0, -1).join("\n") : "";
+        return { info: remaining, commands };
+      }
+    }
+  }
+
   return { info, commands };
 }
 
@@ -148,6 +175,20 @@ async function send() {
   addMessage("user", text);
   conversationHistory.push({ role: "user", content: text });
 
+  const { commands } = await streamBirdResponse();
+
+  // Auto-run loop: if auto-run is on and there's a command, run it then ask for next
+  if (autoRunCb.checked && commands.length > 0) {
+    await autoRunLoop(commands);
+  }
+
+  generating = false;
+  sendBtn.disabled = false;
+  inputEl.focus();
+}
+
+// --- Stream a single response from Bird, render it, return parsed commands ---
+async function streamBirdResponse() {
   const { container: msgDiv, body: bodyEl, timerEl } = addMessage("assistant", "");
   statusEl.textContent = "Generating...";
 
@@ -156,6 +197,8 @@ async function send() {
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
     timerEl.textContent = `${elapsed}s`;
   }, 100);
+
+  let commands = [];
 
   try {
     const res = await fetch("/api/chat", {
@@ -176,7 +219,7 @@ async function send() {
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
-      buffer = lines.pop(); // keep incomplete line in buffer
+      buffer = lines.pop();
 
       for (const line of lines) {
         if (!line.startsWith("data: ")) continue;
@@ -197,8 +240,9 @@ async function send() {
 
     conversationHistory.push({ role: "assistant", content: full });
 
-    const { info, commands } = parseResponse(full);
-    bodyEl.innerHTML = renderMd(info);
+    const parsed = parseResponse(full);
+    commands = parsed.commands;
+    bodyEl.innerHTML = renderMd(parsed.info);
 
     for (const cmd of commands) {
       const block = document.createElement("div");
@@ -236,6 +280,10 @@ async function send() {
       block.appendChild(header);
       block.appendChild(cmdBody);
       msgDiv.insertBefore(block, timerEl);
+
+      // Stash refs for auto-run
+      cmd._block = block;
+      cmd._runBtn = runBtn;
     }
 
     clearInterval(timerInterval);
@@ -271,9 +319,39 @@ async function send() {
     statusEl.textContent = "";
   }
 
-  generating = false;
-  sendBtn.disabled = false;
-  inputEl.focus();
+  return { commands };
+}
+
+// --- Auto-run agentic loop ---
+async function autoRunLoop(commands) {
+  const MAX_ITERATIONS = 20;
+  let iteration = 0;
+  let currentCommands = commands;
+
+  while (autoRunCb.checked && currentCommands.length > 0 && iteration < MAX_ITERATIONS) {
+    iteration++;
+    const cmd = currentCommands[0];
+    statusEl.textContent = `Auto-running command (step ${iteration})...`;
+
+    // Auto-execute the command
+    await runCommand(cmd.action, cmd._block, cmd._runBtn);
+
+    // Check if auto-run was toggled off during execution
+    if (!autoRunCb.checked) break;
+
+    // Ask the AI if we need another command
+    conversationHistory.push({
+      role: "user",
+      content: "Command executed. Based on the output, do we need another command to finish the task? If yes, provide the next command. If the task is complete, confirm it with no code block.",
+    });
+
+    const result = await streamBirdResponse();
+    currentCommands = result.commands;
+  }
+
+  if (iteration >= MAX_ITERATIONS) {
+    statusEl.textContent = "Auto-run stopped: reached max iterations.";
+  }
 }
 
 // --- Run a command via /api/run ---
