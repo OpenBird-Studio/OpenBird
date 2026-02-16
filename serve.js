@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import "dotenv/config";
 import * as http from "node:http";
 import { handler as staticHandler } from "./routes/static.js";
 import { handler as modelsHandler } from "./routes/models.js";
