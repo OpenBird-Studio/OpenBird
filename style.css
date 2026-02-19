@@ -225,6 +225,116 @@ button:hover { background: #eaf4fb; }
   line-height: 1.5;
 }
 
+/* --- Agent step UI --- */
+
+.agent-step-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8e44ad;
+  background: #f4ecf7;
+  border: 1px solid #d2b4de;
+  border-radius: 12px;
+  padding: 2px 10px;
+  margin-bottom: 6px;
+}
+
+.agent-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  color: #7f8c8d;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  transition: opacity 0.2s;
+}
+
+.agent-phase .pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3498db;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.agent-phase.phase-thinking .pulse-dot { background: #3498db; }
+.agent-phase.phase-running .pulse-dot { background: #e67e22; }
+.agent-phase.phase-done .pulse-dot { background: #27ae60; animation: none; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.command-block.executing {
+  border-color: #e67e22;
+  box-shadow: 0 0 0 1px rgba(230, 126, 34, 0.15);
+}
+
+.command-block.executing .command-header {
+  background: #fef5e7;
+  border-bottom-color: #f0c27a;
+  color: #e67e22;
+}
+
+.command-block.cmd-success {
+  border-color: #27ae60;
+}
+
+.command-block.cmd-success .command-header {
+  background: #eafaf1;
+  border-bottom-color: #a9dfbf;
+}
+
+.command-block.cmd-failure {
+  border-color: #e74c3c;
+}
+
+.command-block.cmd-failure .command-header {
+  background: #fdedec;
+  border-bottom-color: #f5b7b1;
+}
+
+.command-output-toggle {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-top: 1px solid #d4e6f1;
+  padding: 4px 14px;
+  font-size: 0.7rem;
+  color: #7f8c8d;
+  cursor: pointer;
+  text-align: left;
+}
+
+.command-output-toggle:hover { background: #f7fbfe; color: #2c3e50; }
+
+.command-output.collapsed { display: none; }
+
+.agent-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: #7f8c8d;
+}
+
+.agent-status-bar .step-count {
+  font-weight: 600;
+  color: #8e44ad;
+}
+
+.agent-status-bar .elapsed {
+  color: #99b8cc;
+}
+
 /* --- Status & Input --- */
 
 #status {
@@ -273,6 +383,8 @@ button:hover { background: #eaf4fb; }
 
 #send-btn:hover { background: #2980b9; }
 #send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+#send-btn.stop-mode { background: #e74c3c; }
+#send-btn.stop-mode:hover { background: #c0392b; }
 
 .empty-state {
   flex: 1;

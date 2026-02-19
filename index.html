@@ -51,6 +51,8 @@ const statusEl = document.getElementById("status");
 
 let generating = false;
 let conversationHistory = [];
+let currentSessionId = null;
+let currentEventSource = null;
 const autoRunCb = document.getElementById("auto-run-cb");
 
 // Persist auto-run preference
@@ -108,27 +110,45 @@ async function loadModels() {
   }
 }
 
-// --- Parse response into info text and commands ---
+// --- Parse response into info text and tool calls ---
 function parseResponse(text) {
   const commands = [];
-  const info = text.replace(/```(?:bash|sh|shell)[ \t]*\n([\s\S]*?)```/gi, (_, code) => {
+  let info = text;
+
+  // 1. <tool_call> tags
+  const tagHits = [];
+  info = info.replace(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g, (full, json) => {
+    try {
+      const p = JSON.parse(json.trim());
+      if (p.name === "bash") commands.push({ action: p.params?.command || "" });
+      else commands.push({ action: `[${p.name}] ${JSON.stringify(p.params)}` });
+      tagHits.push(true);
+    } catch {}
+    return "";
+  });
+  if (tagHits.length > 0) return { info: info.trim(), commands };
+
+  // 2. Bare JSON on own lines
+  const jsonLines = [];
+  info = info.replace(/^\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})\s*$/gm, (full, json) => {
+    try {
+      const p = JSON.parse(json);
+      if (p.name || p.command || p.tool) {
+        const cmd = p.command || p.params?.command;
+        if (cmd) commands.push({ action: cmd });
+        else commands.push({ action: `[${p.name || p.tool}] ${JSON.stringify(p.params || {})}` });
+        jsonLines.push(true);
+      }
+    } catch {}
+    return jsonLines.length ? "" : full;
+  });
+  if (jsonLines.length > 0) return { info: info.trim(), commands };
+
+  // 3. Markdown ```bash blocks
+  info = text.replace(/```(?:bash|sh|shell)[ \t]*\n([\s\S]*?)```/gi, (_, code) => {
     commands.push({ action: code.trim().replace(/^\$\s+/gm, "") });
     return "";
   }).trim();
-
-  // Fallback: detect bare commands when AI skips the code block
-  if (commands.length === 0 && info) {
-    const lines = info.split("\n").map(l => l.trim()).filter(Boolean);
-    if (lines.length <= 2) {
-      const candidate = lines[lines.length - 1];
-      // Short, starts lowercase or with ./ or /, doesn't end with sentence punctuation
-      if (candidate.length < 200 && /^[a-z.\/]/.test(candidate) && !/[.!?:,]$/.test(candidate)) {
-        commands.push({ action: candidate });
-        const remaining = lines.length > 1 ? lines.slice(0, -1).join("\n") : "";
-        return { info: remaining, commands };
-      }
-    }
-  }
 
   return { info, commands };
 }
@@ -162,24 +182,38 @@ function addMessage(role, text) {
   return { container: div, body, timerEl };
 }
 
+// --- Send / Stop button handler ---
+function onSendBtn() {
+  // If agent is running, stop it
+  if (currentEventSource) {
+    stopServerAgent();
+    return;
+  }
+  send();
+}
+
 // --- Send prompt to bird via the server ---
 async function send() {
   const text = inputEl.value.trim();
   if (!text || generating) return;
 
   generating = true;
-  sendBtn.disabled = true;
   inputEl.value = "";
   autoResize();
 
   addMessage("user", text);
-  conversationHistory.push({ role: "user", content: text });
 
-  const { commands } = await streamBirdResponse();
-
-  // Auto-run loop: if auto-run is on and there's a command, run it then ask for next
-  if (autoRunCb.checked && commands.length > 0) {
-    await autoRunLoop(commands);
+  // Auto-run delegates to server-side agent
+  if (autoRunCb.checked) {
+    sendBtn.textContent = "Stop";
+    sendBtn.classList.add("stop-mode");
+    await startServerAgent(text);
+    sendBtn.textContent = "Send";
+    sendBtn.classList.remove("stop-mode");
+  } else {
+    sendBtn.disabled = true;
+    conversationHistory.push({ role: "user", content: text });
+    await streamBirdResponse();
   }
 
   generating = false;
@@ -272,11 +306,7 @@ async function streamBirdResponse() {
         sendBtn.disabled = true;
         await runCommand(cmd.action, block, runBtn);
         // Send command output back to AI as a new turn
-        const { commands: newCmds } = await streamBirdResponse();
-        // If auto-run is on, continue the loop with any new commands
-        if (autoRunCb.checked && newCmds.length > 0) {
-          await autoRunLoop(newCmds);
-        }
+        await streamBirdResponse();
         generating = false;
         sendBtn.disabled = false;
       });
@@ -334,31 +364,315 @@ async function streamBirdResponse() {
   return { commands };
 }
 
-// --- Auto-run agentic loop ---
-async function autoRunLoop(commands) {
-  const MAX_ITERATIONS = 20;
-  let iteration = 0;
-  let currentCommands = commands;
+// --- Server-side agent ---
+async function startServerAgent(message) {
+  try {
+    const body = { model: modelSel.value, message };
+    if (currentSessionId) {
+      // Continue existing session
+      body.sessionId = currentSessionId;
+    } else {
+      // New session — send full conversation history so the agent has context
+      body.history = [...conversationHistory];
+    }
 
-  while (autoRunCb.checked && currentCommands.length > 0 && iteration < MAX_ITERATIONS) {
-    iteration++;
-    const cmd = currentCommands[0];
-    statusEl.textContent = `Auto-running command (step ${iteration})...`;
+    const res = await fetch("/api/agent/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    const sessionId = data.sessionId;
+    currentSessionId = sessionId;
+    localStorage.setItem("openbird-session", sessionId);
 
-    // Auto-execute the command
-    await runCommand(cmd.action, cmd._block, cmd._runBtn);
+    await listenToAgent(sessionId);
 
-    // Check if auto-run was toggled off during execution
-    if (!autoRunCb.checked) break;
-
-    // Command result is already in conversationHistory from runCommand()
-    // Ask AI for next step
-    const result = await streamBirdResponse();
-    currentCommands = result.commands;
+    // Sync conversation history from server so manual mode has full context
+    await syncHistoryFromAgent(sessionId);
+  } catch (e) {
+    statusEl.textContent = "Agent error: " + e.message;
+  } finally {
+    generating = false;
+    sendBtn.disabled = false;
+    currentEventSource = null;
   }
+}
 
-  if (iteration >= MAX_ITERATIONS) {
-    statusEl.textContent = "Auto-run stopped: reached max iterations.";
+async function syncHistoryFromAgent(sessionId) {
+  if (!sessionId) return;
+  try {
+    const res = await fetch(`/api/agent/${sessionId}/status`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.messages && data.messages.length > 0) {
+      conversationHistory = data.messages;
+    }
+  } catch {}
+}
+
+function listenToAgent(sessionId) {
+  return new Promise((resolve) => {
+    const events = new EventSource(`/api/agent/${sessionId}/events`);
+    currentEventSource = events;
+
+    let currentMsgDiv = null;
+    let currentBodyEl = null;
+    let currentTimerEl = null;
+    let currentPhaseEl = null;
+    let aiText = "";
+    let currentCmdBlock = null;
+    let currentCmdOutput = null;
+    let startTime = null;
+    let timerInterval = null;
+    let agentStartTime = performance.now();
+    let maxIter = 20;
+
+    function setPhase(phase, text) {
+      if (!currentPhaseEl) return;
+      currentPhaseEl.className = `agent-phase phase-${phase}`;
+      currentPhaseEl.innerHTML = `<span class="pulse-dot"></span> ${text}`;
+    }
+
+    function updateStatusBar(iteration, extra) {
+      const elapsed = ((performance.now() - agentStartTime) / 1000).toFixed(0);
+      statusEl.innerHTML = `<span class="agent-status-bar"><span class="step-count">Step ${iteration}</span><span>${extra || ""}</span><span class="elapsed">${elapsed}s elapsed</span></span>`;
+    }
+
+    events.onmessage = (e) => {
+      const event = JSON.parse(e.data);
+
+      switch (event.type) {
+        case "step_start":
+          // New AI turn — create a new message bubble
+          const msg = addMessage("assistant", "");
+          currentMsgDiv = msg.container;
+          currentBodyEl = msg.body;
+          currentTimerEl = msg.timerEl;
+          aiText = "";
+          currentCmdBlock = null;
+          currentCmdOutput = null;
+          startTime = performance.now();
+          if (timerInterval) clearInterval(timerInterval);
+          timerInterval = setInterval(() => {
+            if (currentTimerEl) {
+              currentTimerEl.textContent = `${((performance.now() - startTime) / 1000).toFixed(1)}s`;
+            }
+            updateStatusBar(event.iteration, currentCmdBlock ? "executing command" : "thinking");
+          }, 100);
+
+          // Step badge
+          const badge = document.createElement("div");
+          badge.className = "agent-step-badge";
+          badge.textContent = `Step ${event.iteration}`;
+          currentMsgDiv.insertBefore(badge, currentMsgDiv.firstChild);
+
+          // Phase indicator
+          currentPhaseEl = document.createElement("div");
+          currentPhaseEl.className = "agent-phase phase-thinking";
+          currentPhaseEl.innerHTML = '<span class="pulse-dot"></span> Thinking...';
+          currentMsgDiv.insertBefore(currentPhaseEl, currentBodyEl);
+
+          updateStatusBar(event.iteration, "thinking");
+          break;
+
+        case "ai_chunk":
+          aiText += event.content;
+          if (currentBodyEl) {
+            currentBodyEl.className = "md-body";
+            currentBodyEl.innerHTML = renderMd(aiText);
+            chatEl.scrollTop = chatEl.scrollHeight;
+          }
+          break;
+
+        case "ai_done":
+          if (timerInterval) clearInterval(timerInterval);
+          if (currentTimerEl && startTime) {
+            currentTimerEl.textContent = `${((performance.now() - startTime) / 1000).toFixed(1)}s`;
+          }
+          // Re-render with explanation only
+          if (currentBodyEl) {
+            currentBodyEl.innerHTML = renderMd(event.explanation || "");
+          }
+
+          if ((event.toolCalls || []).length > 0) {
+            setPhase("running", "Executing tools...");
+          } else {
+            setPhase("done", "Complete");
+          }
+
+          // Render tool call blocks
+          for (const call of (event.toolCalls || [])) {
+            const block = document.createElement("div");
+            block.className = "command-block";
+            block.dataset.toolName = call.name;
+            const header = document.createElement("div");
+            header.className = "command-header";
+            header.textContent = call.name;
+            const cmdBody = document.createElement("div");
+            cmdBody.className = "command-body";
+            // Display params based on tool type
+            if (call.name === "bash") {
+              cmdBody.textContent = call.params.command || "";
+            } else {
+              cmdBody.textContent = JSON.stringify(call.params, null, 2);
+            }
+            block.appendChild(header);
+            block.appendChild(cmdBody);
+            if (currentMsgDiv && currentTimerEl) {
+              currentMsgDiv.insertBefore(block, currentTimerEl);
+            }
+          }
+          // Show metrics
+          if (event.metrics && currentMsgDiv) {
+            const metricsEl = document.createElement("div");
+            metricsEl.className = "metrics";
+            const parts = [];
+            const m = event.metrics;
+            if (m.eval_count != null) parts.push(`${m.eval_count} tokens`);
+            if (m.eval_count && m.eval_duration) parts.push(`${(m.eval_count / (m.eval_duration / 1e9)).toFixed(1)} tok/s`);
+            if (m.prompt_eval_count != null) parts.push(`${m.prompt_eval_count} prompt tokens`);
+            if (m.total_duration) parts.push(`${(m.total_duration / 1e9).toFixed(2)}s total`);
+            metricsEl.textContent = parts.join(" · ");
+            currentMsgDiv.appendChild(metricsEl);
+          }
+          chatEl.scrollTop = chatEl.scrollHeight;
+          break;
+
+        case "tool_start": {
+          const label = event.name === "bash"
+            ? (event.params.command || "").slice(0, 40)
+            : event.name;
+          updateStatusBar(event.iteration || "?", label + (label.length >= 40 ? "..." : ""));
+          // Find the matching block by tool name and mark as executing
+          const blocks = currentMsgDiv ? currentMsgDiv.querySelectorAll(`.command-block[data-tool-name="${event.name}"]`) : [];
+          currentCmdBlock = blocks.length > 0 ? blocks[blocks.length - 1] : null;
+          if (currentCmdBlock && !currentCmdBlock.classList.contains("executing")) {
+            currentCmdBlock.classList.add("executing");
+            currentCmdOutput = document.createElement("div");
+            currentCmdOutput.className = "command-output";
+            currentCmdBlock.appendChild(currentCmdOutput);
+          }
+          break;
+        }
+
+        case "tool_output":
+          if (currentCmdOutput) {
+            if (event.stream === "stderr") {
+              const span = document.createElement("span");
+              span.className = "stderr";
+              span.textContent = event.data;
+              currentCmdOutput.appendChild(span);
+            } else {
+              currentCmdOutput.textContent += event.data;
+            }
+            chatEl.scrollTop = chatEl.scrollHeight;
+          }
+          break;
+
+        case "tool_done": {
+          if (currentCmdBlock) {
+            currentCmdBlock.classList.remove("executing");
+            const result = event.result || {};
+            const isSuccess = result.exitCode === 0 || (!result.error && result.exitCode == null);
+            currentCmdBlock.classList.add(isSuccess ? "cmd-success" : "cmd-failure");
+            const hdr = currentCmdBlock.querySelector(".command-header");
+            if (hdr) {
+              const resultEl = document.createElement("span");
+              resultEl.style.marginLeft = "auto";
+              resultEl.style.fontWeight = "600";
+              if (result.exitCode != null) {
+                resultEl.textContent = `exit ${result.exitCode}`;
+              } else if (result.error) {
+                resultEl.textContent = "error";
+              } else {
+                resultEl.textContent = "done";
+              }
+              resultEl.style.color = isSuccess ? "#27ae60" : "#e74c3c";
+              hdr.appendChild(resultEl);
+            }
+            // For non-bash tools without streaming output, show result summary
+            if (currentCmdOutput && !currentCmdOutput.textContent && event.name !== "bash") {
+              if (result.content != null) {
+                currentCmdOutput.textContent = result.content.length > 2000
+                  ? result.content.slice(0, 2000) + "\n... (truncated)"
+                  : result.content;
+              } else if (result.error) {
+                currentCmdOutput.textContent = result.error;
+              } else if (result.written) {
+                currentCmdOutput.textContent = `Wrote ${result.bytes} bytes to ${result.path}`;
+              }
+            }
+            // Add collapse toggle for long output
+            if (currentCmdOutput && currentCmdOutput.textContent.length > 300) {
+              const toggle = document.createElement("button");
+              toggle.className = "command-output-toggle";
+              toggle.textContent = "collapse output";
+              let collapsed = false;
+              toggle.addEventListener("click", () => {
+                collapsed = !collapsed;
+                currentCmdOutput.classList.toggle("collapsed", collapsed);
+                toggle.textContent = collapsed ? "expand output" : "collapse output";
+              });
+              currentCmdBlock.appendChild(toggle);
+            }
+          }
+          const doneResult = event.result || {};
+          const doneSuccess = doneResult.exitCode === 0 || (!doneResult.error && doneResult.exitCode == null);
+          setPhase("done", doneSuccess ? `${event.name} succeeded` : `${event.name} failed`);
+          currentCmdBlock = null;
+          currentCmdOutput = null;
+          break;
+        }
+
+        case "status":
+          if (timerInterval) clearInterval(timerInterval);
+          if (event.status === "done" || event.status === "stopped" || event.status === "max_iterations") {
+            events.close();
+            currentEventSource = null;
+            const elapsed = ((performance.now() - agentStartTime) / 1000).toFixed(1);
+            if (event.status === "max_iterations") {
+              statusEl.textContent = `Agent stopped after max iterations (${elapsed}s)`;
+            } else if (event.status === "stopped") {
+              statusEl.textContent = `Agent stopped by user (${elapsed}s)`;
+            } else {
+              statusEl.textContent = `Agent completed (${elapsed}s)`;
+            }
+            if (event.status === "done") {
+              localStorage.removeItem("openbird-session");
+              currentSessionId = null;
+            }
+            resolve();
+          }
+          break;
+
+        case "error":
+          if (timerInterval) clearInterval(timerInterval);
+          events.close();
+          currentEventSource = null;
+          statusEl.textContent = "Agent error: " + event.message;
+          resolve();
+          break;
+      }
+    };
+
+    events.onerror = () => {
+      if (timerInterval) clearInterval(timerInterval);
+      events.close();
+      currentEventSource = null;
+      statusEl.textContent = "Agent connection lost.";
+      resolve();
+    };
+  });
+}
+
+function stopServerAgent() {
+  if (currentSessionId) {
+    fetch(`/api/agent/${currentSessionId}/stop`, { method: "POST" });
+  }
+  if (currentEventSource) {
+    currentEventSource.close();
+    currentEventSource = null;
   }
 }
 
@@ -442,15 +756,17 @@ function autoResize() {
 }
 
 // --- Events ---
-sendBtn.addEventListener("click", send);
+sendBtn.addEventListener("click", onSendBtn);
 inputEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSendBtn(); }
 });
 inputEl.addEventListener("input", autoResize);
 clearBtn.addEventListener("click", () => {
   chatEl.innerHTML = '<div class="empty-state" id="empty">Send a message to start chatting</div>';
   statusEl.textContent = "";
   conversationHistory = [];
+  currentSessionId = null;
+  localStorage.removeItem("openbird-session");
 });
 
 modelSel.addEventListener("change", () => {
@@ -460,6 +776,36 @@ modelSel.addEventListener("change", () => {
 // --- Init ---
 loadModels();
 inputEl.focus();
+
+// Reconnect to active agent session on page load
+(async function reconnect() {
+  const savedSession = localStorage.getItem("openbird-session");
+  if (!savedSession) return;
+  try {
+    const res = await fetch(`/api/agent/${savedSession}/status`);
+    if (!res.ok) { localStorage.removeItem("openbird-session"); return; }
+    const data = await res.json();
+    if (data.status === "running") {
+      currentSessionId = savedSession;
+      generating = true;
+      sendBtn.textContent = "Stop";
+      sendBtn.classList.add("stop-mode");
+      statusEl.textContent = "Reconnecting to agent...";
+      // Rebuild conversation from server state
+      for (const msg of data.messages) {
+        addMessage(msg.role === "assistant" ? "assistant" : "user", msg.content);
+      }
+      await listenToAgent(savedSession);
+      sendBtn.textContent = "Send";
+      sendBtn.classList.remove("stop-mode");
+      generating = false;
+    } else {
+      localStorage.removeItem("openbird-session");
+    }
+  } catch {
+    localStorage.removeItem("openbird-session");
+  }
+})();
 </script>
 </body>
 </html>

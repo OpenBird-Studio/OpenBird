@@ -6,6 +6,7 @@ import { handler as staticHandler } from "./routes/static.js";
 import { handler as modelsHandler } from "./routes/models.js";
 import { handler as chatHandler } from "./routes/chat.js";
 import { handler as runHandler } from "./routes/run.js";
+import { handler as agentHandler } from "./routes/agent.js";
 import { attachTerminal } from "./routes/terminal.js";
 
 const PORT = process.env.PORT || 3000;
@@ -26,6 +27,10 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/api/run") {
     return runHandler(req, res);
+  }
+
+  if (req.url.startsWith("/api/agent")) {
+    return agentHandler(req, res);
   }
 
   res.writeHead(404);
