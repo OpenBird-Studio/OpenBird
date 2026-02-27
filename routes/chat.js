@@ -28,7 +28,7 @@ export async function handler(req, res) {
     return;
   }
 
-  const { model, messages } = body;
+  const { model, messages, host } = body;
   if (!model || !Array.isArray(messages) || messages.length === 0) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "model and messages are required" }));
@@ -45,7 +45,7 @@ export async function handler(req, res) {
     const fullMessages = [SYSTEM_PROMPT, ...messages];
     const { metrics } = await chat(model, fullMessages, (chunk) => {
       res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
-    });
+    }, host);
     res.write(`data: ${JSON.stringify({ done: true, metrics })}\n\n`);
   } catch (e) {
     res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);

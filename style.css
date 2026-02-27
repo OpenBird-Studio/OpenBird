@@ -32,54 +32,29 @@ header h1 { font-size: 2rem; color: #3498db; font-weight: 700; }
 
 /* --- Auto-run toggle --- */
 
-.auto-run-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  user-select: none;
+#host-input {
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.78rem;
+  background: #f7fbfe;
+  color: #2c3e50;
+  border: 1px solid #bdd5ea;
+  border-radius: 6px;
+  padding: 6px 10px;
+  width: 220px;
 }
 
-.auto-run-toggle input { display: none; }
+#host-input:focus { outline: 2px solid #85c1e9; outline-offset: -1px; }
 
-.toggle-slider {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  background: #bdd5ea;
-  border-radius: 10px;
-  transition: background 0.2s;
-}
+#connect-btn { font-size: 0.8rem; padding: 6px 12px; background: #3498db; color: #fff; border: none; }
+#connect-btn:hover { background: #2980b9; }
+#connect-btn:disabled { opacity: 0.6; cursor: wait; }
+#connect-btn.connected { background: #27ae60; cursor: default; }
+#connect-btn.connected:hover { background: #27ae60; }
+#connect-btn.failed { background: #e74c3c; cursor: default; }
+#connect-btn.failed:hover { background: #e74c3c; }
 
-.toggle-slider::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform 0.2s;
-}
-
-.auto-run-toggle input:checked + .toggle-slider {
-  background: #27ae60;
-}
-
-.auto-run-toggle input:checked + .toggle-slider::after {
-  transform: translateX(16px);
-}
-
-.toggle-label {
-  font-size: 0.8rem;
-  color: #7f8c8d;
-  font-weight: 600;
-}
-
-.auto-run-toggle input:checked ~ .toggle-label {
-  color: #27ae60;
-}
+#disconnect-btn { font-size: 0.8rem; padding: 6px 12px; background: #e74c3c; color: #fff; border: none; }
+#disconnect-btn:hover { background: #c0392b; }
 
 select, button {
   font-family: inherit;
@@ -158,8 +133,8 @@ button:hover { background: #eaf4fb; }
 
 .message .command-block {
   margin-top: 10px;
-  background: #f7fbfe;
-  border: 1px solid #85c1e9;
+  background: #f8f9fa;
+  border: 1px solid #d5d8dc;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -167,38 +142,42 @@ button:hover { background: #eaf4fb; }
 .command-block .command-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  background: #eaf4fb;
-  border-bottom: 1px solid #bdd5ea;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #ebedef;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #6c757d;
+  cursor: pointer;
+  user-select: none;
+}
+
+.command-block .command-header:hover {
+  background: #dee0e3;
+}
+
+.command-label {
+  flex: 1;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-result {
   font-size: 0.7rem;
   font-weight: 600;
-  text-transform: uppercase;
-  color: #2980b9;
-  letter-spacing: 0.5px;
 }
 
-.command-block .command-buttons { display: flex; gap: 6px; }
-
-.command-block .command-copy,
-.command-block .command-run {
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  background: transparent;
-  color: #7f8c8d;
-  border: 1px solid #bdd5ea;
-  border-radius: 4px;
-  cursor: pointer;
+.command-chevron {
+  font-size: 0.6rem;
+  flex-shrink: 0;
 }
 
-.command-block .command-copy:hover,
-.command-block .command-run:hover { color: #2c3e50; border-color: #85c1e9; }
-
-.command-block .command-run { color: #27ae60; border-color: #a9dfbf; }
-.command-block .command-run:hover { border-color: #27ae60; }
-.command-block .command-run:disabled { opacity: 0.6; cursor: not-allowed; }
-.command-block .command-run.success { color: #27ae60; border-color: #27ae60; }
-.command-block .command-run.failure { color: #e74c3c; border-color: #e74c3c; }
+.command-block.collapsed .command-output {
+  display: none;
+}
 
 .command-block .command-output {
   padding: 10px 14px;
@@ -215,15 +194,6 @@ button:hover { background: #eaf4fb; }
 
 .command-output .stderr { color: #e74c3c; }
 
-.command-block .command-body {
-  padding: 10px 14px;
-  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
-  font-size: 0.85rem;
-  color: #2980b9;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  line-height: 1.5;
-}
 
 /* --- Agent step UI --- */
 
@@ -283,12 +253,12 @@ button:hover { background: #eaf4fb; }
 }
 
 .command-block.cmd-success {
-  border-color: #27ae60;
+  border-color: #d5d8dc;
 }
 
 .command-block.cmd-success .command-header {
-  background: #eafaf1;
-  border-bottom-color: #a9dfbf;
+  background: #ebedef;
+  border-bottom-color: #d5d8dc;
 }
 
 .command-block.cmd-failure {
@@ -300,22 +270,6 @@ button:hover { background: #eaf4fb; }
   border-bottom-color: #f5b7b1;
 }
 
-.command-output-toggle {
-  display: block;
-  width: 100%;
-  background: transparent;
-  border: none;
-  border-top: 1px solid #d4e6f1;
-  padding: 4px 14px;
-  font-size: 0.7rem;
-  color: #7f8c8d;
-  cursor: pointer;
-  text-align: left;
-}
-
-.command-output-toggle:hover { background: #f7fbfe; color: #2c3e50; }
-
-.command-output.collapsed { display: none; }
 
 .agent-status-bar {
   display: flex;
@@ -451,6 +405,9 @@ button:hover { background: #eaf4fb; }
   .header-controls {
     gap: 6px;
   }
+
+  #host-input { width: 130px; font-size: 0.72rem; padding: 5px 8px; }
+  #connect-btn, #disconnect-btn { font-size: 0.75rem; padding: 5px 8px; }
 
   .header-controls label { display: none; }
 

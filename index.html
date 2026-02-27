@@ -18,15 +18,11 @@
     <h1>OpenBird</h1>
   </div>
   <div class="header-controls">
-    <label for="model-select" style="font-size:.8rem;color:#7f8c8d;">Model:</label>
-    <select id="model-select"><option>loading...</option></select>
-    <label class="auto-run-toggle">
-      <input type="checkbox" id="auto-run-cb">
-      <span class="toggle-slider"></span>
-      <span class="toggle-label">Auto</span>
-    </label>
+    <input id="host-input" type="text" placeholder="Ollama URL" spellcheck="false">
+    <button id="connect-btn">Connect</button>
+    <button id="disconnect-btn" style="display:none">Disconnect</button>
+    <select id="model-select"><option>not connected</option></select>
     <button id="clear-btn">Clear</button>
-    <button onclick="location.href='/terminal'" style="color:#27ae60;border-color:#a9dfbf;">Terminal</button>
   </div>
 </header>
 
@@ -47,19 +43,23 @@ const inputEl  = document.getElementById("input");
 const sendBtn  = document.getElementById("send-btn");
 const clearBtn = document.getElementById("clear-btn");
 const modelSel = document.getElementById("model-select");
+const hostInput = document.getElementById("host-input");
+const connectBtn = document.getElementById("connect-btn");
+const disconnectBtn = document.getElementById("disconnect-btn");
 const statusEl = document.getElementById("status");
+
+// Restore saved host
+const savedHost = localStorage.getItem("openbird-host");
+if (savedHost) hostInput.value = savedHost;
+
+function getHost() {
+  return hostInput.value.trim().replace(/\/+$/, "") || undefined;
+}
 
 let generating = false;
 let conversationHistory = [];
 let currentSessionId = null;
 let currentEventSource = null;
-const autoRunCb = document.getElementById("auto-run-cb");
-
-// Persist auto-run preference
-autoRunCb.checked = localStorage.getItem("openbird-autorun") === "true";
-autoRunCb.addEventListener("change", () => {
-  localStorage.setItem("openbird-autorun", autoRunCb.checked);
-});
 
 // --- Markdown + math rendering ---
 function renderMd(text) {
@@ -90,8 +90,15 @@ function renderMd(text) {
 
 // --- Load models via bird --models ---
 async function loadModels() {
+  connectBtn.textContent = "...";
+  connectBtn.disabled = true;
+  connectBtn.classList.remove("connected", "failed");
   try {
-    const res = await fetch("/api/models");
+    const host = getHost();
+    if (host) localStorage.setItem("openbird-host", host);
+    else localStorage.removeItem("openbird-host");
+    const url = host ? `/api/models?host=${encodeURIComponent(host)}` : "/api/models";
+    const res = await fetch(url);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     modelSel.innerHTML = "";
@@ -103,67 +110,20 @@ async function loadModels() {
     });
     const saved = localStorage.getItem("openbird-model");
     if (saved && data.models.includes(saved)) modelSel.value = saved;
+    connectBtn.style.display = "none";
+    disconnectBtn.style.display = "";
     statusEl.textContent = `Connected — ${data.models.length} model(s) available`;
   } catch (e) {
     modelSel.innerHTML = "<option>unavailable</option>";
+    connectBtn.textContent = "Failed";
+    connectBtn.classList.add("failed");
+    connectBtn.style.display = "";
+    disconnectBtn.style.display = "none";
     statusEl.textContent = "Could not connect. Is Ollama running?";
+  } finally {
+    connectBtn.disabled = false;
+    if (connectBtn.textContent === "...") connectBtn.textContent = "Connect";
   }
-}
-
-// --- Parse response into info text and commands ---
-function parseResponse(text) {
-  const commands = [];
-  let info = text;
-
-  // 1. <cmd>...</cmd> tags (preferred)
-  let tagHits = 0;
-  info = info.replace(/<cmd>\s*([\s\S]*?)\s*<\/cmd>/gi, (full, raw) => {
-    const cmd = normalizeCommand(raw);
-    if (cmd) commands.push({ action: cmd });
-    tagHits++;
-    return "";
-  });
-  if (tagHits > 0 && commands.length > 0) return { info: info.trim(), commands };
-
-  // 2. CMD: control lines
-  const keptLines = [];
-  let cmdLineHits = 0;
-  for (const line of info.split(/\r?\n/)) {
-    const m = line.match(/^\s*CMD:\s*(.*)$/i);
-    if (m) {
-      const cmd = normalizeCommand(m[1]);
-      if (cmd) commands.push({ action: cmd });
-      cmdLineHits++;
-      continue;
-    }
-    keptLines.push(line);
-  }
-  info = keptLines.join("\n");
-  if (cmdLineHits > 0 && commands.length > 0) return { info: info.trim(), commands };
-
-  // 3. Markdown ```bash blocks (fallback)
-  info = text.replace(/```(?:bash|sh|shell)[ \t]*\n([\s\S]*?)```/gi, (_, code) => {
-    const cmd = normalizeCommand(code);
-    if (cmd) commands.push({ action: cmd });
-    return "";
-  }).trim();
-
-  return { info, commands };
-}
-
-function normalizeCommand(raw) {
-  if (typeof raw !== "string") return "";
-  let s = raw.trim();
-  if (!s) return "";
-
-  s = s.replace(/^`+|`+$/g, "").trim();
-  const lines = s
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return "";
-
-  return lines[0].replace(/^\$\s+/, "").trim();
 }
 
 // --- Render a chat bubble, returns the body element for streaming ---
@@ -216,171 +176,22 @@ async function send() {
 
   addMessage("user", text);
 
-  // Auto-run delegates to server-side agent
-  if (autoRunCb.checked) {
-    sendBtn.textContent = "Stop";
-    sendBtn.classList.add("stop-mode");
-    await startServerAgent(text);
-    sendBtn.textContent = "Send";
-    sendBtn.classList.remove("stop-mode");
-  } else {
-    sendBtn.disabled = true;
-    conversationHistory.push({ role: "user", content: text });
-    await streamBirdResponse();
-  }
+  sendBtn.textContent = "Stop";
+  sendBtn.classList.add("stop-mode");
+  await startServerAgent(text);
+  sendBtn.textContent = "Send";
+  sendBtn.classList.remove("stop-mode");
 
   generating = false;
   sendBtn.disabled = false;
   inputEl.focus();
 }
 
-// --- Stream a single response from Bird, render it, return parsed commands ---
-async function streamBirdResponse() {
-  const { container: msgDiv, body: bodyEl, timerEl } = addMessage("assistant", "");
-  statusEl.textContent = "Generating...";
-
-  const startTime = performance.now();
-  let timerInterval = setInterval(() => {
-    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-    timerEl.textContent = `${elapsed}s`;
-  }, 100);
-
-  let commands = [];
-
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: modelSel.value, messages: [...conversationHistory] }),
-    });
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let full = "";
-    let buffer = "";
-    let metrics = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop();
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const json = JSON.parse(line.slice(6));
-        if (json.error) throw new Error(json.error);
-        if (json.done) {
-          metrics = json.metrics || null;
-          break;
-        }
-        if (json.content) {
-          full += json.content;
-          bodyEl.className = "md-body";
-          bodyEl.innerHTML = renderMd(full);
-          chatEl.scrollTop = chatEl.scrollHeight;
-        }
-      }
-    }
-
-    conversationHistory.push({ role: "assistant", content: full });
-
-    const parsed = parseResponse(full);
-    commands = parsed.commands;
-    bodyEl.innerHTML = renderMd(parsed.info);
-
-    for (const cmd of commands) {
-      const block = document.createElement("div");
-      block.className = "command-block";
-
-      const header = document.createElement("div");
-      header.className = "command-header";
-      header.textContent = "command";
-
-      const btnGroup = document.createElement("div");
-      btnGroup.className = "command-buttons";
-
-      const copyBtn = document.createElement("button");
-      copyBtn.className = "command-copy";
-      copyBtn.textContent = "copy";
-      copyBtn.addEventListener("click", () => {
-        navigator.clipboard.writeText(cmd.action);
-        copyBtn.textContent = "copied!";
-        setTimeout(() => copyBtn.textContent = "copy", 1500);
-      });
-
-      const runBtn = document.createElement("button");
-      runBtn.className = "command-run";
-      runBtn.textContent = "run";
-      runBtn.addEventListener("click", async () => {
-        generating = true;
-        sendBtn.disabled = true;
-        await runCommand(cmd.action, block, runBtn);
-        // Send command output back to AI as a new turn
-        await streamBirdResponse();
-        generating = false;
-        sendBtn.disabled = false;
-      });
-
-      btnGroup.appendChild(copyBtn);
-      btnGroup.appendChild(runBtn);
-      header.appendChild(btnGroup);
-
-      const cmdBody = document.createElement("div");
-      cmdBody.className = "command-body";
-      cmdBody.textContent = cmd.action;
-
-      block.appendChild(header);
-      block.appendChild(cmdBody);
-      msgDiv.insertBefore(block, timerEl);
-
-      // Stash refs for auto-run
-      cmd._block = block;
-      cmd._runBtn = runBtn;
-    }
-
-    clearInterval(timerInterval);
-    const totalSec = ((performance.now() - startTime) / 1000).toFixed(1);
-    timerEl.textContent = `${totalSec}s`;
-
-    if (metrics) {
-      const metricsEl = document.createElement("div");
-      metricsEl.className = "metrics";
-      const parts = [];
-      if (metrics.eval_count != null)
-        parts.push(`${metrics.eval_count} tokens`);
-      if (metrics.eval_count && metrics.eval_duration)
-        parts.push(`${(metrics.eval_count / (metrics.eval_duration / 1e9)).toFixed(1)} tok/s`);
-      if (metrics.prompt_eval_count != null)
-        parts.push(`${metrics.prompt_eval_count} prompt tokens`);
-      if (metrics.prompt_eval_count && metrics.prompt_eval_duration)
-        parts.push(`${(metrics.prompt_eval_count / (metrics.prompt_eval_duration / 1e9)).toFixed(1)} prompt tok/s`);
-      if (metrics.total_duration)
-        parts.push(`${(metrics.total_duration / 1e9).toFixed(2)}s total`);
-      if (metrics.load_duration)
-        parts.push(`${(metrics.load_duration / 1e9).toFixed(2)}s load`);
-      metricsEl.textContent = parts.join(" · ");
-      msgDiv.appendChild(metricsEl);
-    }
-
-    statusEl.textContent = "";
-    chatEl.scrollTop = chatEl.scrollHeight;
-  } catch (e) {
-    bodyEl.textContent = "Error: " + e.message;
-    clearInterval(timerInterval);
-    timerEl.textContent = "";
-    statusEl.textContent = "";
-  }
-
-  return { commands };
-}
-
 // --- Server-side agent ---
 async function startServerAgent(message) {
   try {
-    const body = { model: modelSel.value, message };
+    const host = getHost();
+    const body = { model: modelSel.value, message, host };
     if (currentSessionId) {
       // Continue existing session
       body.sessionId = currentSessionId;
@@ -401,7 +212,6 @@ async function startServerAgent(message) {
 
     await listenToAgent(sessionId);
 
-    // Sync conversation history from server so manual mode has full context
     await syncHistoryFromAgent(sessionId);
   } catch (e) {
     statusEl.textContent = "Agent error: " + e.message;
@@ -429,22 +239,31 @@ function listenToAgent(sessionId) {
     const events = new EventSource(`/api/agent/${sessionId}/events`);
     currentEventSource = events;
 
-    let currentMsgDiv = null;
-    let currentBodyEl = null;
-    let currentTimerEl = null;
-    let currentPhaseEl = null;
-    let aiText = "";
+    // Single bubble for the entire agent run
+    const agentMsg = addMessage("assistant", "");
+    const msgDiv = agentMsg.container;
+    const timerEl = agentMsg.timerEl;
+    // Remove the initial empty body — we'll append step sections instead
+    agentMsg.body.remove();
+
+    let phaseEl = null;
+    let currentStepBody = null;
     let currentCmdBlock = null;
     let currentCmdOutput = null;
-    let startTime = null;
+    let stepStartTime = null;
     let timerInterval = null;
     let agentStartTime = performance.now();
-    let maxIter = 20;
+
+    // Insertion point: always insert new content before the timer
+    function appendToMsg(el) {
+      msgDiv.insertBefore(el, timerEl);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
 
     function setPhase(phase, text) {
-      if (!currentPhaseEl) return;
-      currentPhaseEl.className = `agent-phase phase-${phase}`;
-      currentPhaseEl.innerHTML = `<span class="pulse-dot"></span> ${text}`;
+      if (!phaseEl) return;
+      phaseEl.className = `agent-phase phase-${phase}`;
+      phaseEl.innerHTML = `<span class="pulse-dot"></span> ${text}`;
     }
 
     function updateStatusBar(iteration, extra) {
@@ -456,21 +275,14 @@ function listenToAgent(sessionId) {
       const event = JSON.parse(e.data);
 
       switch (event.type) {
-        case "step_start":
-          // New AI turn — create a new message bubble
-          const msg = addMessage("assistant", "");
-          currentMsgDiv = msg.container;
-          currentBodyEl = msg.body;
-          currentTimerEl = msg.timerEl;
-          aiText = "";
+        case "step_start": {
           currentCmdBlock = null;
           currentCmdOutput = null;
-          startTime = performance.now();
+          stepStartTime = performance.now();
           if (timerInterval) clearInterval(timerInterval);
           timerInterval = setInterval(() => {
-            if (currentTimerEl) {
-              currentTimerEl.textContent = `${((performance.now() - startTime) / 1000).toFixed(1)}s`;
-            }
+            const elapsed = ((performance.now() - stepStartTime) / 1000).toFixed(1);
+            timerEl.textContent = `${elapsed}s`;
             updateStatusBar(event.iteration, currentCmdBlock ? "executing command" : "thinking");
           }, 100);
 
@@ -478,66 +290,55 @@ function listenToAgent(sessionId) {
           const badge = document.createElement("div");
           badge.className = "agent-step-badge";
           badge.textContent = `Step ${event.iteration}`;
-          currentMsgDiv.insertBefore(badge, currentMsgDiv.firstChild);
+          appendToMsg(badge);
 
           // Phase indicator
-          currentPhaseEl = document.createElement("div");
-          currentPhaseEl.className = "agent-phase phase-thinking";
-          currentPhaseEl.innerHTML = '<span class="pulse-dot"></span> Thinking...';
-          currentMsgDiv.insertBefore(currentPhaseEl, currentBodyEl);
+          phaseEl = document.createElement("div");
+          phaseEl.className = "agent-phase phase-thinking";
+          phaseEl.innerHTML = '<span class="pulse-dot"></span> Thinking...';
+          appendToMsg(phaseEl);
+
+          // Body for this step's AI text
+          currentStepBody = document.createElement("div");
+          appendToMsg(currentStepBody);
 
           updateStatusBar(event.iteration, "thinking");
           break;
+        }
 
         case "ai_chunk":
-          aiText += event.content;
-          if (currentBodyEl) {
-            currentBodyEl.className = "md-body";
-            currentBodyEl.innerHTML = renderMd(aiText);
+          if (currentStepBody) {
+            currentStepBody.className = "md-body";
+            currentStepBody.innerHTML = renderMd(event.content ? (currentStepBody._rawText = (currentStepBody._rawText || "") + event.content) : "");
             chatEl.scrollTop = chatEl.scrollHeight;
           }
           break;
 
         case "ai_done":
           if (timerInterval) clearInterval(timerInterval);
-          if (currentTimerEl && startTime) {
-            currentTimerEl.textContent = `${((performance.now() - startTime) / 1000).toFixed(1)}s`;
+          if (timerEl && stepStartTime) {
+            timerEl.textContent = `${((performance.now() - stepStartTime) / 1000).toFixed(1)}s`;
           }
-          // Re-render with explanation only
-          if (currentBodyEl) {
-            currentBodyEl.innerHTML = renderMd(event.explanation || "");
+          // Re-render with explanation only (commands stripped)
+          if (currentStepBody) {
+            const explanation = event.explanation || "";
+            if (explanation) {
+              currentStepBody.className = "md-body";
+              currentStepBody.innerHTML = renderMd(explanation);
+            } else {
+              // No explanation text — remove empty body
+              currentStepBody.remove();
+            }
           }
 
           if ((event.toolCalls || []).length > 0) {
-            setPhase("running", "Executing tools...");
+            setPhase("running", "Executing...");
           } else {
             setPhase("done", "Complete");
           }
 
-          // Render tool call blocks
-          for (const call of (event.toolCalls || [])) {
-            const block = document.createElement("div");
-            block.className = "command-block";
-            block.dataset.toolName = call.name;
-            const header = document.createElement("div");
-            header.className = "command-header";
-            header.textContent = call.name;
-            const cmdBody = document.createElement("div");
-            cmdBody.className = "command-body";
-            // Display params based on tool type
-            if (call.name === "bash") {
-              cmdBody.textContent = call.params.command || "";
-            } else {
-              cmdBody.textContent = JSON.stringify(call.params, null, 2);
-            }
-            block.appendChild(header);
-            block.appendChild(cmdBody);
-            if (currentMsgDiv && currentTimerEl) {
-              currentMsgDiv.insertBefore(block, currentTimerEl);
-            }
-          }
           // Show metrics
-          if (event.metrics && currentMsgDiv) {
+          if (event.metrics && msgDiv) {
             const metricsEl = document.createElement("div");
             metricsEl.className = "metrics";
             const parts = [];
@@ -547,7 +348,37 @@ function listenToAgent(sessionId) {
             if (m.prompt_eval_count != null) parts.push(`${m.prompt_eval_count} prompt tokens`);
             if (m.total_duration) parts.push(`${(m.total_duration / 1e9).toFixed(2)}s total`);
             metricsEl.textContent = parts.join(" · ");
-            currentMsgDiv.appendChild(metricsEl);
+            appendToMsg(metricsEl);
+          }
+
+          // Render tool call blocks (after metrics, at bottom of step)
+          for (const call of (event.toolCalls || [])) {
+            const block = document.createElement("div");
+            block.className = "command-block collapsed";
+            block.dataset.toolName = call.name;
+
+            const header = document.createElement("div");
+            header.className = "command-header";
+            // Show the command inline in the header for bash
+            const cmdText = call.name === "bash" ? (call.params.command || call.name) : call.name;
+            const cmdLabel = document.createElement("span");
+            cmdLabel.className = "command-label";
+            cmdLabel.textContent = cmdText;
+            header.appendChild(cmdLabel);
+
+            const chevron = document.createElement("span");
+            chevron.className = "command-chevron";
+            chevron.textContent = "\u25B6";
+            header.appendChild(chevron);
+
+            // Click header to toggle output visibility
+            header.addEventListener("click", () => {
+              block.classList.toggle("collapsed");
+              chevron.textContent = block.classList.contains("collapsed") ? "\u25B6" : "\u25BC";
+            });
+
+            block.appendChild(header);
+            appendToMsg(block);
           }
           chatEl.scrollTop = chatEl.scrollHeight;
           break;
@@ -557,8 +388,8 @@ function listenToAgent(sessionId) {
             ? (event.params.command || "").slice(0, 40)
             : event.name;
           updateStatusBar(event.iteration || "?", label + (label.length >= 40 ? "..." : ""));
-          // Find the matching block by tool name and mark as executing
-          const blocks = currentMsgDiv ? currentMsgDiv.querySelectorAll(`.command-block[data-tool-name="${event.name}"]`) : [];
+          // Find the matching block by tool name
+          const blocks = msgDiv.querySelectorAll(`.command-block[data-tool-name="${event.name}"]`);
           currentCmdBlock = blocks.length > 0 ? blocks[blocks.length - 1] : null;
           if (currentCmdBlock && !currentCmdBlock.classList.contains("executing")) {
             currentCmdBlock.classList.add("executing");
@@ -592,8 +423,7 @@ function listenToAgent(sessionId) {
             const hdr = currentCmdBlock.querySelector(".command-header");
             if (hdr) {
               const resultEl = document.createElement("span");
-              resultEl.style.marginLeft = "auto";
-              resultEl.style.fontWeight = "600";
+              resultEl.className = "command-result";
               if (result.exitCode != null) {
                 resultEl.textContent = `exit ${result.exitCode}`;
               } else if (result.error) {
@@ -604,7 +434,7 @@ function listenToAgent(sessionId) {
               resultEl.style.color = isSuccess ? "#27ae60" : "#e74c3c";
               hdr.appendChild(resultEl);
             }
-            // For non-bash tools without streaming output, show result summary
+            // For non-bash tools, show result summary in output
             if (currentCmdOutput && !currentCmdOutput.textContent && event.name !== "bash") {
               if (result.content != null) {
                 currentCmdOutput.textContent = result.content.length > 2000
@@ -616,18 +446,9 @@ function listenToAgent(sessionId) {
                 currentCmdOutput.textContent = `Wrote ${result.bytes} bytes to ${result.path}`;
               }
             }
-            // Add collapse toggle for long output
-            if (currentCmdOutput && currentCmdOutput.textContent.length > 300) {
-              const toggle = document.createElement("button");
-              toggle.className = "command-output-toggle";
-              toggle.textContent = "collapse output";
-              let collapsed = false;
-              toggle.addEventListener("click", () => {
-                collapsed = !collapsed;
-                currentCmdOutput.classList.toggle("collapsed", collapsed);
-                toggle.textContent = collapsed ? "expand output" : "collapse output";
-              });
-              currentCmdBlock.appendChild(toggle);
+            // If no output at all, remove empty area
+            if (currentCmdOutput && !currentCmdOutput.textContent.trim()) {
+              currentCmdOutput.remove();
             }
           }
           const doneResult = event.result || {};
@@ -689,79 +510,6 @@ function stopServerAgent() {
   }
 }
 
-// --- Run a command via /api/run ---
-async function runCommand(command, block, runBtn) {
-  runBtn.disabled = true;
-  runBtn.textContent = "running...";
-
-  // Remove previous output if re-running
-  const prev = block.querySelector(".command-output");
-  if (prev) prev.remove();
-
-  const output = document.createElement("div");
-  output.className = "command-output";
-  block.appendChild(output);
-  chatEl.scrollTop = chatEl.scrollHeight;
-
-  let stdout = "";
-  let stderr = "";
-  let exitCode = null;
-
-  try {
-    const res = await fetch("/api/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command }),
-    });
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop();
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const json = JSON.parse(line.slice(6));
-
-        if (json.type === "stdout") {
-          stdout += json.data;
-          output.textContent += json.data;
-        } else if (json.type === "stderr") {
-          stderr += json.data;
-          const span = document.createElement("span");
-          span.className = "stderr";
-          span.textContent = json.data;
-          output.appendChild(span);
-        } else if (json.type === "exit") {
-          exitCode = json.code;
-          runBtn.textContent = json.code === 0 ? "ran" : `exit ${json.code}`;
-          runBtn.className = json.code === 0 ? "command-run success" : "command-run failure";
-        }
-        chatEl.scrollTop = chatEl.scrollHeight;
-      }
-    }
-  } catch (e) {
-    stderr = e.message;
-    output.textContent = "Error: " + e.message;
-  }
-
-  // Add command result to conversation context
-  let result = `[Executed command: ${command}]\n`;
-  if (stdout) result += `stdout:\n${stdout.trimEnd()}\n`;
-  if (stderr) result += `stderr:\n${stderr.trimEnd()}\n`;
-  if (exitCode !== null) result += `exit code: ${exitCode}`;
-  conversationHistory.push({ role: "user", content: result.trim() });
-
-  runBtn.disabled = false;
-}
-
 // --- Auto-resize textarea ---
 function autoResize() {
   inputEl.style.height = "auto";
@@ -784,6 +532,19 @@ clearBtn.addEventListener("click", () => {
 
 modelSel.addEventListener("change", () => {
   localStorage.setItem("openbird-model", modelSel.value);
+});
+
+connectBtn.addEventListener("click", () => loadModels());
+disconnectBtn.addEventListener("click", () => {
+  disconnectBtn.style.display = "none";
+  connectBtn.style.display = "";
+  connectBtn.textContent = "Connect";
+  connectBtn.classList.remove("connected", "failed");
+  modelSel.innerHTML = "<option>not connected</option>";
+  statusEl.textContent = "";
+});
+hostInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); loadModels(); }
 });
 
 // --- Init ---

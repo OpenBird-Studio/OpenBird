@@ -47,7 +47,7 @@ async function handleStart(req, res) {
     return;
   }
 
-  const { model, message, sessionId, history } = body;
+  const { model, message, sessionId, history, host } = body;
   if (!model || !message) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "model and message are required" }));
@@ -71,7 +71,7 @@ async function handleStart(req, res) {
     return;
   }
 
-  const session = createSession(model, history);
+  const session = createSession(model, history, host);
 
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ sessionId: session.id }));

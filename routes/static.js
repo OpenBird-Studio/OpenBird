@@ -3,7 +3,6 @@ import * as path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const INDEX_PATH = path.join(ROOT, "index.html");
-const TERMINAL_PATH = path.join(ROOT, "terminal.html");
 const CSS_PATH = path.join(ROOT, "style.css");
 
 const STATIC_TYPES = {
@@ -18,13 +17,6 @@ const STATIC_TYPES = {
 export function handler(req, res) {
   if (req.url === "/" || req.url === "/index.html") {
     const html = fs.readFileSync(INDEX_PATH, "utf-8");
-    res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(html);
-    return true;
-  }
-
-  if (req.url === "/terminal" || req.url === "/terminal.html") {
-    const html = fs.readFileSync(TERMINAL_PATH, "utf-8");
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
     return true;
