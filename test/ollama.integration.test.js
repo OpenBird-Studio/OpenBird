@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { chat, listModels } from "../lib/ollama.js";
 import { parseResponse } from "../lib/parser.js";
 
-const OLLAMA_URL = process.env.OLLAMA_HOST || "http://localhost:11434";
+const HOST = process.env.OPENBIRD_TEST_HOST || "http://localhost:11434";
 const MODEL = process.env.OPENBIRD_TEST_MODEL || "qwen2.5:3b-instruct";
 const RUN_INTEGRATION = process.env.OPENBIRD_RUN_INTEGRATION === "1";
 
@@ -15,9 +15,9 @@ describe("ollama integration", () => {
       return;
     }
 
-    const models = await listModels();
+    const models = await listModels(HOST);
     if (!models.includes(MODEL)) {
-      t.skip(`Model '${MODEL}' not available at ${OLLAMA_URL}`);
+      t.skip(`Model '${MODEL}' not available at ${HOST}`);
       return;
     }
 
@@ -34,7 +34,7 @@ describe("ollama integration", () => {
       },
     ];
 
-    const { response } = await chat(MODEL, messages, () => {});
+    const { response } = await chat(MODEL, messages, () => {}, HOST);
     const parsed = parseResponse(response);
 
     assert.ok(parsed.commands.length > 0, `No command parsed from model output: ${response}`);
