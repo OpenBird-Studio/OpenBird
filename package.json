@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "serve": "node serve.js",
-    "test": "node --test 'test/**/*.test.js'"
+    "test": "node --test 'test/**/*.test.js'",
+    "test:integration": "OPENBIRD_RUN_INTEGRATION=1 node --test test/ollama.integration.test.js"
   },
   "dependencies": {
     "dotenv": "^17.3.1",

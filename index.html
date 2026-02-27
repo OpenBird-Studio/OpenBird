@@ -110,47 +110,60 @@ async function loadModels() {
   }
 }
 
-// --- Parse response into info text and tool calls ---
+// --- Parse response into info text and commands ---
 function parseResponse(text) {
   const commands = [];
   let info = text;
 
-  // 1. <tool_call> tags
-  const tagHits = [];
-  info = info.replace(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g, (full, json) => {
-    try {
-      const p = JSON.parse(json.trim());
-      if (p.name === "bash") commands.push({ action: p.params?.command || "" });
-      else commands.push({ action: `[${p.name}] ${JSON.stringify(p.params)}` });
-      tagHits.push(true);
-    } catch {}
+  // 1. <cmd>...</cmd> tags (preferred)
+  let tagHits = 0;
+  info = info.replace(/<cmd>\s*([\s\S]*?)\s*<\/cmd>/gi, (full, raw) => {
+    const cmd = normalizeCommand(raw);
+    if (cmd) commands.push({ action: cmd });
+    tagHits++;
     return "";
   });
-  if (tagHits.length > 0) return { info: info.trim(), commands };
+  if (tagHits > 0 && commands.length > 0) return { info: info.trim(), commands };
 
-  // 2. Bare JSON on own lines
-  const jsonLines = [];
-  info = info.replace(/^\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})\s*$/gm, (full, json) => {
-    try {
-      const p = JSON.parse(json);
-      if (p.name || p.command || p.tool) {
-        const cmd = p.command || p.params?.command;
-        if (cmd) commands.push({ action: cmd });
-        else commands.push({ action: `[${p.name || p.tool}] ${JSON.stringify(p.params || {})}` });
-        jsonLines.push(true);
-      }
-    } catch {}
-    return jsonLines.length ? "" : full;
-  });
-  if (jsonLines.length > 0) return { info: info.trim(), commands };
+  // 2. CMD: control lines
+  const keptLines = [];
+  let cmdLineHits = 0;
+  for (const line of info.split(/\r?\n/)) {
+    const m = line.match(/^\s*CMD:\s*(.*)$/i);
+    if (m) {
+      const cmd = normalizeCommand(m[1]);
+      if (cmd) commands.push({ action: cmd });
+      cmdLineHits++;
+      continue;
+    }
+    keptLines.push(line);
+  }
+  info = keptLines.join("\n");
+  if (cmdLineHits > 0 && commands.length > 0) return { info: info.trim(), commands };
 
-  // 3. Markdown ```bash blocks
+  // 3. Markdown ```bash blocks (fallback)
   info = text.replace(/```(?:bash|sh|shell)[ \t]*\n([\s\S]*?)```/gi, (_, code) => {
-    commands.push({ action: code.trim().replace(/^\$\s+/gm, "") });
+    const cmd = normalizeCommand(code);
+    if (cmd) commands.push({ action: cmd });
     return "";
   }).trim();
 
   return { info, commands };
+}
+
+function normalizeCommand(raw) {
+  if (typeof raw !== "string") return "";
+  let s = raw.trim();
+  if (!s) return "";
+
+  s = s.replace(/^`+|`+$/g, "").trim();
+  const lines = s
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return "";
+
+  return lines[0].replace(/^\$\s+/, "").trim();
 }
 
 // --- Render a chat bubble, returns the body element for streaming ---

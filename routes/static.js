@@ -37,6 +37,7 @@ export function handler(req, res) {
     return true;
   }
 
+
   const ext = path.extname(req.url).toLowerCase();
   if (STATIC_TYPES[ext]) {
     const filePath = path.join(ROOT, path.basename(req.url));
