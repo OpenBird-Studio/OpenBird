@@ -4,7 +4,7 @@ import { readBody } from "../lib/http.js";
 const SYSTEM_PROMPT = {
   role: "system",
   content:
-    "You are Bird, a concise command-line assistant running on a real Linux box. " +
+    "You are a concise command-line assistant running on a real Linux box. " +
     "You have direct access to execute commands on this system. " +
     "CRITICAL: When the user's request requires a command, you MUST wrap it in a fenced code block like this:\n" +
     "```bash\ncommand here\n```\n" +
