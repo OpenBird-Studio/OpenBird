@@ -95,7 +95,8 @@
       let conversationHistory = [];
       let currentSessionId = null;
       let currentEventSource = null;
-      let currentTypingEl = null;
+      let currentBody = null;
+      let currentRawText = "";
       let currentMetricsEl = null;
       let currentListenResolve = null;
       let models = [];
@@ -235,63 +236,94 @@
 
       function addCopyButtons(container) {
         container.querySelectorAll("pre").forEach((pre) => {
-          if (pre.querySelector(".code-actions")) return;
+          if (pre.dataset.hasActions) return;
+          pre.dataset.hasActions = "1";
 
           const code = pre.querySelector("code");
           const codeText = code ? code.textContent : pre.textContent;
 
-          const actions = document.createElement("div");
-          actions.className = "code-actions";
+          // Wrap pre in a container for layout control
+          const wrapper = document.createElement("div");
+          wrapper.className = "code-block";
+          pre.parentNode.insertBefore(wrapper, pre);
+          wrapper.appendChild(pre);
+
+          // Toolbar above the code
+          const toolbar = document.createElement("div");
+          toolbar.className = "code-toolbar";
+          wrapper.insertBefore(toolbar, pre);
 
           // Copy button
           const copyBtn = document.createElement("button");
-          copyBtn.className = "copy-btn";
+          copyBtn.className = "toolbar-btn";
           copyBtn.textContent = "Copy";
           copyBtn.addEventListener("click", () => {
             navigator.clipboard.writeText(codeText);
             copyBtn.textContent = "Copied!";
             setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
           });
-          actions.appendChild(copyBtn);
+          toolbar.appendChild(copyBtn);
 
           // Render button for HTML code blocks
           if (isHtmlCode(codeText)) {
             const renderBtn = document.createElement("button");
-            renderBtn.className = "copy-btn render-btn";
+            renderBtn.className = "toolbar-btn";
             renderBtn.textContent = "Render";
             const expandBtn = document.createElement("button");
-            expandBtn.className = "copy-btn expand-btn";
+            expandBtn.className = "toolbar-btn";
             expandBtn.textContent = "Fullscreen";
             expandBtn.style.display = "none";
+            let renderWrap = null;
             let iframe = null;
             let showing = false;
             let fullscreen = false;
 
+            function scaleIframe() {
+              if (!renderWrap || !iframe || fullscreen) return;
+              const wrapW = renderWrap.clientWidth;
+              const scale = wrapW / 1024;
+              iframe.style.transform = `scale(${scale})`;
+              renderWrap.style.height = Math.round(768 * scale) + "px";
+            }
+
+            function reloadIframe() {
+              if (iframe) iframe.srcdoc = codeText;
+            }
+
+            const msgEl = wrapper.closest(".message");
+
             renderBtn.addEventListener("click", () => {
               if (!showing) {
-                if (code) code.style.display = "none";
+                pre.style.display = "none";
                 if (!iframe) {
+                  renderWrap = document.createElement("div");
+                  renderWrap.className = "render-wrap";
                   iframe = document.createElement("iframe");
                   iframe.className = "render-frame";
-                  iframe.sandbox = "allow-scripts allow-same-origin";
-                  pre.appendChild(iframe);
+                  iframe.sandbox = "allow-scripts";
+                  renderWrap.appendChild(iframe);
+                  wrapper.appendChild(renderWrap);
                   iframe.srcdoc = codeText;
+                  window.addEventListener("resize", scaleIframe);
                 }
-                iframe.style.display = "block";
+                renderWrap.style.display = "";
                 expandBtn.style.display = "";
+                if (msgEl) msgEl.classList.add("has-render");
                 renderBtn.textContent = "Code";
                 showing = true;
+                requestAnimationFrame(scaleIframe);
               } else {
-                // Exit fullscreen first if active
                 if (fullscreen) {
-                  pre.classList.remove("render-fullscreen");
+                  wrapper.classList.remove("render-fullscreen");
                   document.body.classList.remove("has-fullscreen");
                   fullscreen = false;
                   expandBtn.textContent = "Fullscreen";
+                  requestAnimationFrame(scaleIframe);
                 }
-                if (code) code.style.display = "";
-                if (iframe) iframe.style.display = "none";
+                pre.style.display = "";
+                if (renderWrap) renderWrap.style.display = "none";
                 expandBtn.style.display = "none";
+                if (msgEl) msgEl.classList.remove("has-render");
                 renderBtn.textContent = "Render";
                 showing = false;
               }
@@ -299,25 +331,147 @@
 
             expandBtn.addEventListener("click", () => {
               if (!fullscreen) {
-                pre.classList.add("render-fullscreen");
+                wrapper.classList.add("render-fullscreen");
                 document.body.classList.add("has-fullscreen");
                 expandBtn.textContent = "Exit";
                 fullscreen = true;
+                // Reload at full size so canvas/animations work properly
+                requestAnimationFrame(() => reloadIframe());
               } else {
-                pre.classList.remove("render-fullscreen");
+                wrapper.classList.remove("render-fullscreen");
                 document.body.classList.remove("has-fullscreen");
                 expandBtn.textContent = "Fullscreen";
                 fullscreen = false;
+                // Reload at scaled size
+                requestAnimationFrame(() => {
+                  scaleIframe();
+                  reloadIframe();
+                });
               }
             });
 
-            actions.appendChild(renderBtn);
-            actions.appendChild(expandBtn);
+            toolbar.appendChild(renderBtn);
+            toolbar.appendChild(expandBtn);
+          }
+        });
+      }
+
+      // --- Extract HTML from AI response ---
+      function extractHtml(text) {
+        const fenceMatch = text.match(/```(?:html)?\s*\n([\s\S]*?)```/);
+        if (fenceMatch) return fenceMatch[1].trim();
+        if (isHtmlCode(text)) return text.trim();
+        return null;
+      }
+
+      // --- Render final result (render-first for HTML) ---
+      function renderFinalResult(body, rawText) {
+        const html = extractHtml(rawText);
+        const msgEl = body.closest(".message");
+
+        if (html) {
+          msgEl.classList.add("has-render");
+          body.innerHTML = "";
+
+          const wrapper = document.createElement("div");
+          wrapper.className = "code-block";
+
+          const toolbar = document.createElement("div");
+          toolbar.className = "code-toolbar";
+
+          const copyBtn = document.createElement("button");
+          copyBtn.className = "toolbar-btn";
+          copyBtn.textContent = "Copy";
+          copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(html);
+            copyBtn.textContent = "Copied!";
+            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+          });
+
+          const codeBtn = document.createElement("button");
+          codeBtn.className = "toolbar-btn";
+          codeBtn.textContent = "Code";
+
+          const expandBtn = document.createElement("button");
+          expandBtn.className = "toolbar-btn";
+          expandBtn.textContent = "Fullscreen";
+
+          toolbar.appendChild(copyBtn);
+          toolbar.appendChild(codeBtn);
+          toolbar.appendChild(expandBtn);
+
+          const pre = document.createElement("pre");
+          pre.style.display = "none";
+          const code = document.createElement("code");
+          code.textContent = html;
+          pre.appendChild(code);
+
+          const renderWrap = document.createElement("div");
+          renderWrap.className = "render-wrap";
+          const iframe = document.createElement("iframe");
+          iframe.className = "render-frame";
+          iframe.sandbox = "allow-scripts";
+          iframe.srcdoc = html;
+          renderWrap.appendChild(iframe);
+
+          wrapper.appendChild(toolbar);
+          wrapper.appendChild(pre);
+          wrapper.appendChild(renderWrap);
+          body.appendChild(wrapper);
+
+          let showingCode = false;
+          let fullscreen = false;
+
+          function scaleIframe() {
+            if (fullscreen) return;
+            const wrapW = renderWrap.clientWidth;
+            const scale = wrapW / 1024;
+            iframe.style.transform = `scale(${scale})`;
+            renderWrap.style.height = Math.round(768 * scale) + "px";
           }
 
-          pre.style.position = "relative";
-          pre.appendChild(actions);
-        });
+          codeBtn.addEventListener("click", () => {
+            if (!showingCode) {
+              pre.style.display = "";
+              renderWrap.style.display = "none";
+              expandBtn.style.display = "none";
+              codeBtn.textContent = "Render";
+              showingCode = true;
+            } else {
+              pre.style.display = "none";
+              renderWrap.style.display = "";
+              expandBtn.style.display = "";
+              codeBtn.textContent = "Code";
+              showingCode = false;
+              requestAnimationFrame(scaleIframe);
+            }
+          });
+
+          expandBtn.addEventListener("click", () => {
+            if (!fullscreen) {
+              wrapper.classList.add("render-fullscreen");
+              document.body.classList.add("has-fullscreen");
+              expandBtn.textContent = "Exit";
+              fullscreen = true;
+              requestAnimationFrame(() => { iframe.srcdoc = html; });
+            } else {
+              wrapper.classList.remove("render-fullscreen");
+              document.body.classList.remove("has-fullscreen");
+              expandBtn.textContent = "Fullscreen";
+              fullscreen = false;
+              requestAnimationFrame(() => { scaleIframe(); iframe.srcdoc = html; });
+            }
+          });
+
+          window.addEventListener("resize", scaleIframe);
+          requestAnimationFrame(scaleIframe);
+        } else {
+          // Fallback to markdown for non-HTML responses
+          body.innerHTML = renderMd(rawText);
+          addCopyButtons(body);
+        }
+
+        chatEl.scrollTop = chatEl.scrollHeight;
       }
 
       // --- Render a chat bubble ---
@@ -336,8 +490,6 @@
         const body = document.createElement("div");
         if (role === "assistant") {
           body.className = "md-body";
-          body.innerHTML = text ? renderMd(text) : "";
-          if (text) addCopyButtons(body);
         } else {
           body.textContent = text;
         }
@@ -351,6 +503,18 @@
         }
 
         chatEl.appendChild(div);
+
+        // Render assistant content after DOM insertion
+        if (role === "assistant" && text) {
+          const html = extractHtml(text);
+          if (html) {
+            renderFinalResult(body, text);
+          } else {
+            body.innerHTML = renderMd(text);
+            addCopyButtons(body);
+          }
+        }
+
         chatEl.scrollTop = chatEl.scrollHeight;
         return { container: div, body, metricsEl };
       }
@@ -440,12 +604,12 @@
           let rawText = "";
           const startTime = performance.now();
 
-          // Show typing indicator until first chunk arrives
-          const typingEl = document.createElement("div");
-          typingEl.className = "typing-indicator";
-          typingEl.innerHTML = "<span></span><span></span><span></span>";
-          body.appendChild(typingEl);
-          currentTypingEl = typingEl;
+          // Show loading state
+          body.innerHTML = '<div class="loading-state"><div class="loading-shimmer"><div class="shimmer-bar" style="width:70%"></div><div class="shimmer-bar" style="width:90%"></div><div class="shimmer-bar" style="width:50%"></div><div class="shimmer-bar" style="width:80%"></div><div class="shimmer-bar" style="width:60%"></div></div><div class="loading-text">Generating<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></div></div>';
+          msg.container.classList.add("has-render");
+
+          currentBody = body;
+          currentRawText = "";
           currentMetricsEl = metricsEl;
 
           events.onmessage = (e) => {
@@ -453,14 +617,14 @@
 
             switch (event.type) {
               case "ai_chunk":
-                if (typingEl.parentNode) typingEl.remove();
                 rawText += event.content;
-                body.innerHTML = renderMd(rawText);
-                addCopyButtons(body);
-                chatEl.scrollTop = chatEl.scrollHeight;
+                currentRawText = rawText;
                 break;
 
               case "ai_done":
+                renderFinalResult(body, rawText);
+                currentBody = null;
+                currentRawText = "";
                 if (event.metrics && metricsEl) {
                   const parts = [];
                   const m = event.metrics;
@@ -486,6 +650,14 @@
                     (performance.now() - startTime) /
                     1000
                   ).toFixed(1);
+                  // If still showing loading state, render what we have
+                  if (body.querySelector(".loading-state") && rawText) {
+                    renderFinalResult(body, rawText);
+                    currentBody = null;
+                    currentRawText = "";
+                  } else if (body.querySelector(".loading-state")) {
+                    body.innerHTML = '<div style="color:#8899a6;padding:12px">Stopped</div>';
+                  }
                   statusEl.textContent =
                     event.status === "stopped"
                       ? `Stopped (${elapsed}s)`
@@ -497,7 +669,11 @@
               case "error":
                 events.close();
                 currentEventSource = null;
+                body.innerHTML = "";
+                body.textContent = "Error: " + event.message;
                 statusEl.textContent = "Error: " + event.message;
+                currentBody = null;
+                currentRawText = "";
                 resolve();
                 break;
             }
@@ -507,6 +683,8 @@
             events.close();
             currentEventSource = null;
             statusEl.textContent = "Connection lost.";
+            currentBody = null;
+            currentRawText = "";
             resolve();
           };
         });
@@ -520,10 +698,14 @@
           currentEventSource.close();
           currentEventSource = null;
         }
-        if (currentTypingEl && currentTypingEl.parentNode) {
-          currentTypingEl.remove();
+        // Render whatever we have so far
+        if (currentBody && currentRawText) {
+          renderFinalResult(currentBody, currentRawText);
+        } else if (currentBody) {
+          currentBody.innerHTML = '<div style="color:#8899a6;padding:12px">Stopped</div>';
         }
-        currentTypingEl = null;
+        currentBody = null;
+        currentRawText = "";
         if (currentMetricsEl) {
           currentMetricsEl.textContent = "Stopped";
         }

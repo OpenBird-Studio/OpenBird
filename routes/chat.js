@@ -82,8 +82,7 @@ export async function ollamaChat(model, messages, onChunk, host) {
 const SYSTEM_PROMPT = {
   role: "system",
   content:
-    "You are a helpful assistant called OpenBird. " +
-    "Be concise and direct. Use markdown formatting when helpful.",
+    "Return you answer in 1 html file with javascript and css. Tailwind is installed.",
 };
 
 const sessions = new Map();
