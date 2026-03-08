@@ -9,8 +9,6 @@
     "test:integration": "OPENBIRD_RUN_INTEGRATION=1 node --test test/ollama.integration.test.js"
   },
   "dependencies": {
-    "dotenv": "^17.3.1",
-    "node-pty": "^1.0.0",
-    "ws": "^8.18.0"
+    "dotenv": "^17.3.1"
   }
 }

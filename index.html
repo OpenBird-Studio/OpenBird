@@ -1,585 +1,515 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>OpenBird</title>
-<link rel="icon" type="image/png" href="/bird.png">
-<link rel="stylesheet" href="/style.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>Bird</title>
+    <link rel="icon" type="image/png" href="/bird.png" />
+    <link rel="stylesheet" href="/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  </head>
+  <body>
+    <header>
+      <div class="header-left">
+        <button id="model-trigger" class="model-trigger">
+          <span class="brand">Bird</span>
+          <span class="model-name" id="model-name">not connected</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="model-dropdown" class="model-dropdown">
+          <div class="dropdown-section" id="model-list">
+            <div class="dropdown-empty">Not connected</div>
+          </div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-section dropdown-connection">
+            <div class="conn-status" id="conn-status">
+              <span class="conn-dot" id="conn-dot"></span>
+              <span id="conn-text">Not connected</span>
+            </div>
+            <div class="conn-url-row">
+              <input
+                id="host-input"
+                type="text"
+                placeholder="https://your-ollama-url..."
+                spellcheck="false"
+              />
+            </div>
+            <div class="conn-actions">
+              <button id="connect-btn" class="conn-btn">Connect</button>
+            </div>
+            <div class="conn-error" id="conn-error" style="display: none"></div>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="clear-btn" class="icon-btn" title="New chat">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3.75V14.25M3.75 9H14.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </header>
 
-<header>
-  <div class="logo">
-    <img src="/bird.png" alt="OpenBird" class="logo-img">
-    <h1>OpenBird</h1>
-  </div>
-  <div class="header-controls">
-    <input id="host-input" type="text" placeholder="Ollama URL" spellcheck="false">
-    <button id="connect-btn">Connect</button>
-    <button id="disconnect-btn" style="display:none">Disconnect</button>
-    <select id="model-select"><option>not connected</option></select>
-    <button id="clear-btn">Clear</button>
-  </div>
-</header>
+    <div id="chat">
+      <div class="empty-state" id="empty">Send a message to start chatting</div>
+    </div>
 
-<div id="chat">
-  <div class="empty-state" id="empty">Send a message to start chatting</div>
-</div>
+    <div id="status"></div>
 
-<div id="status"></div>
+    <div id="input-bar">
+      <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
+      <button id="send-btn">Send</button>
+    </div>
 
-<div id="input-bar">
-  <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
-  <button id="send-btn">Send</button>
-</div>
+    <script>
+      const chatEl = document.getElementById("chat");
+      const inputEl = document.getElementById("input");
+      const sendBtn = document.getElementById("send-btn");
+      const clearBtn = document.getElementById("clear-btn");
+      const hostInput = document.getElementById("host-input");
+      const connectBtn = document.getElementById("connect-btn");
+      const statusEl = document.getElementById("status");
+      const modelTrigger = document.getElementById("model-trigger");
+      const modelDropdown = document.getElementById("model-dropdown");
+      const modelNameEl = document.getElementById("model-name");
+      const modelListEl = document.getElementById("model-list");
+      const connStatus = document.getElementById("conn-status");
+      const connDot = document.getElementById("conn-dot");
+      const connText = document.getElementById("conn-text");
+      const connError = document.getElementById("conn-error");
 
-<script>
-const chatEl   = document.getElementById("chat");
-const inputEl  = document.getElementById("input");
-const sendBtn  = document.getElementById("send-btn");
-const clearBtn = document.getElementById("clear-btn");
-const modelSel = document.getElementById("model-select");
-const hostInput = document.getElementById("host-input");
-const connectBtn = document.getElementById("connect-btn");
-const disconnectBtn = document.getElementById("disconnect-btn");
-const statusEl = document.getElementById("status");
+      const savedHost = localStorage.getItem("openbird-host");
+      if (savedHost) hostInput.value = savedHost;
 
-// Restore saved host
-const savedHost = localStorage.getItem("openbird-host");
-if (savedHost) hostInput.value = savedHost;
+      function getHost() {
+        return hostInput.value.trim().replace(/\/+$/, "") || undefined;
+      }
 
-function getHost() {
-  return hostInput.value.trim().replace(/\/+$/, "") || undefined;
-}
+      let generating = false;
+      let conversationHistory = [];
+      let currentSessionId = null;
+      let currentEventSource = null;
+      let currentTypingEl = null;
+      let currentMetricsEl = null;
+      let currentListenResolve = null;
+      let models = [];
+      let selectedModel = null;
+      let connState = "disconnected"; // disconnected | connecting | connected | error
 
-let generating = false;
-let conversationHistory = [];
-let currentSessionId = null;
-let currentEventSource = null;
-
-// --- Markdown + math rendering ---
-function renderMd(text) {
-  // Protect math blocks from marked before parsing
-  const blocks = [];
-  const push = (display, tex) => {
-    blocks.push({ display, tex: tex.trim() });
-    return `\x00MATH${blocks.length - 1}\x00`;
-  };
-  // Display: $$...$$ and \[...\]
-  let s = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => push(true, m));
-  s = s.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => push(true, m));
-  // Inline: $...$ and \(...\)
-  s = s.replace(/\$([^\$\n]+?)\$/g, (_, m) => push(false, m));
-  s = s.replace(/\\\((.+?)\\\)/g, (_, m) => push(false, m));
-
-  let html = marked.parse(s);
-
-  // Replace placeholders with rendered KaTeX
-  html = html.replace(/\x00MATH(\d+)\x00/g, (_, i) => {
-    const { display, tex } = blocks[Number(i)];
-    try {
-      return katex.renderToString(tex, { displayMode: display, throwOnError: false });
-    } catch { return tex; }
-  });
-  return html;
-}
-
-// --- Load models via bird --models ---
-async function loadModels() {
-  connectBtn.textContent = "...";
-  connectBtn.disabled = true;
-  connectBtn.classList.remove("connected", "failed");
-  try {
-    const host = getHost();
-    if (host) localStorage.setItem("openbird-host", host);
-    else localStorage.removeItem("openbird-host");
-    const url = host ? `/api/models?host=${encodeURIComponent(host)}` : "/api/models";
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    modelSel.innerHTML = "";
-    data.models.forEach(name => {
-      const opt = document.createElement("option");
-      opt.value = name;
-      opt.textContent = name;
-      modelSel.appendChild(opt);
-    });
-    const saved = localStorage.getItem("openbird-model");
-    if (saved && data.models.includes(saved)) modelSel.value = saved;
-    connectBtn.style.display = "none";
-    disconnectBtn.style.display = "";
-    statusEl.textContent = `Connected — ${data.models.length} model(s) available`;
-  } catch (e) {
-    modelSel.innerHTML = "<option>unavailable</option>";
-    connectBtn.textContent = "Failed";
-    connectBtn.classList.add("failed");
-    connectBtn.style.display = "";
-    disconnectBtn.style.display = "none";
-    statusEl.textContent = "Could not connect. Is Ollama running?";
-  } finally {
-    connectBtn.disabled = false;
-    if (connectBtn.textContent === "...") connectBtn.textContent = "Connect";
-  }
-}
-
-// --- Render a chat bubble, returns the body element for streaming ---
-function addMessage(role, text) {
-  const empty = document.getElementById("empty");
-  if (empty) empty.remove();
-
-  const div = document.createElement("div");
-  div.className = `message ${role}`;
-
-  const label = document.createElement("div");
-  label.className = "role";
-  label.textContent = role === "user" ? "you" : "bird";
-  div.appendChild(label);
-
-  const body = document.createElement("div");
-  body.textContent = text;
-  div.appendChild(body);
-
-  let timerEl = null;
-  if (role === "assistant") {
-    timerEl = document.createElement("div");
-    timerEl.className = "timer";
-    div.appendChild(timerEl);
-  }
-
-  chatEl.appendChild(div);
-  chatEl.scrollTop = chatEl.scrollHeight;
-  return { container: div, body, timerEl };
-}
-
-// --- Send / Stop button handler ---
-function onSendBtn() {
-  // If agent is running, stop it
-  if (currentEventSource) {
-    stopServerAgent();
-    return;
-  }
-  send();
-}
-
-// --- Send prompt to bird via the server ---
-async function send() {
-  const text = inputEl.value.trim();
-  if (!text || generating) return;
-
-  generating = true;
-  inputEl.value = "";
-  autoResize();
-
-  addMessage("user", text);
-
-  sendBtn.textContent = "Stop";
-  sendBtn.classList.add("stop-mode");
-  await startServerAgent(text);
-  sendBtn.textContent = "Send";
-  sendBtn.classList.remove("stop-mode");
-
-  generating = false;
-  sendBtn.disabled = false;
-  inputEl.focus();
-}
-
-// --- Server-side agent ---
-async function startServerAgent(message) {
-  try {
-    const host = getHost();
-    const body = { model: modelSel.value, message, host };
-    if (currentSessionId) {
-      // Continue existing session
-      body.sessionId = currentSessionId;
-    } else {
-      // New session — send full conversation history so the agent has context
-      body.history = [...conversationHistory];
-    }
-
-    const res = await fetch("/api/agent/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    const sessionId = data.sessionId;
-    currentSessionId = sessionId;
-    localStorage.setItem("openbird-session", sessionId);
-
-    await listenToAgent(sessionId);
-
-    await syncHistoryFromAgent(sessionId);
-  } catch (e) {
-    statusEl.textContent = "Agent error: " + e.message;
-  } finally {
-    generating = false;
-    sendBtn.disabled = false;
-    currentEventSource = null;
-  }
-}
-
-async function syncHistoryFromAgent(sessionId) {
-  if (!sessionId) return;
-  try {
-    const res = await fetch(`/api/agent/${sessionId}/status`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.messages && data.messages.length > 0) {
-      conversationHistory = data.messages;
-    }
-  } catch {}
-}
-
-function listenToAgent(sessionId) {
-  return new Promise((resolve) => {
-    const events = new EventSource(`/api/agent/${sessionId}/events`);
-    currentEventSource = events;
-
-    // Single bubble for the entire agent run
-    const agentMsg = addMessage("assistant", "");
-    const msgDiv = agentMsg.container;
-    const timerEl = agentMsg.timerEl;
-    // Remove the initial empty body — we'll append step sections instead
-    agentMsg.body.remove();
-
-    let phaseEl = null;
-    let currentStepBody = null;
-    let currentCmdBlock = null;
-    let currentCmdOutput = null;
-    let stepStartTime = null;
-    let timerInterval = null;
-    let agentStartTime = performance.now();
-
-    // Insertion point: always insert new content before the timer
-    function appendToMsg(el) {
-      msgDiv.insertBefore(el, timerEl);
-      chatEl.scrollTop = chatEl.scrollHeight;
-    }
-
-    function setPhase(phase, text) {
-      if (!phaseEl) return;
-      phaseEl.className = `agent-phase phase-${phase}`;
-      phaseEl.innerHTML = `<span class="pulse-dot"></span> ${text}`;
-    }
-
-    function updateStatusBar(iteration, extra) {
-      const elapsed = ((performance.now() - agentStartTime) / 1000).toFixed(0);
-      statusEl.innerHTML = `<span class="agent-status-bar"><span class="step-count">Step ${iteration}</span><span>${extra || ""}</span><span class="elapsed">${elapsed}s elapsed</span></span>`;
-    }
-
-    events.onmessage = (e) => {
-      const event = JSON.parse(e.data);
-
-      switch (event.type) {
-        case "step_start": {
-          currentCmdBlock = null;
-          currentCmdOutput = null;
-          stepStartTime = performance.now();
-          if (timerInterval) clearInterval(timerInterval);
-          timerInterval = setInterval(() => {
-            const elapsed = ((performance.now() - stepStartTime) / 1000).toFixed(1);
-            timerEl.textContent = `${elapsed}s`;
-            updateStatusBar(event.iteration, currentCmdBlock ? "executing command" : "thinking");
-          }, 100);
-
-          // Step badge
-          const badge = document.createElement("div");
-          badge.className = "agent-step-badge";
-          badge.textContent = `Step ${event.iteration}`;
-          appendToMsg(badge);
-
-          // Phase indicator
-          phaseEl = document.createElement("div");
-          phaseEl.className = "agent-phase phase-thinking";
-          phaseEl.innerHTML = '<span class="pulse-dot"></span> Thinking...';
-          appendToMsg(phaseEl);
-
-          // Body for this step's AI text
-          currentStepBody = document.createElement("div");
-          appendToMsg(currentStepBody);
-
-          updateStatusBar(event.iteration, "thinking");
-          break;
+      // --- Dropdown toggle ---
+      modelTrigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        modelDropdown.classList.toggle("open");
+      });
+      document.addEventListener("click", (e) => {
+        if (!modelDropdown.contains(e.target) && !modelTrigger.contains(e.target)) {
+          modelDropdown.classList.remove("open");
         }
+      });
 
-        case "ai_chunk":
-          if (currentStepBody) {
-            currentStepBody.className = "md-body";
-            currentStepBody.innerHTML = renderMd(event.content ? (currentStepBody._rawText = (currentStepBody._rawText || "") + event.content) : "");
-            chatEl.scrollTop = chatEl.scrollHeight;
+      // --- Connection state UI ---
+      function setConnState(state, msg) {
+        connState = state;
+        connDot.className = "conn-dot " + state;
+        if (state === "disconnected") {
+          connText.textContent = msg || "Not connected";
+          connectBtn.textContent = "Connect";
+          connectBtn.disabled = false;
+          connError.style.display = "none";
+          modelNameEl.textContent = "not connected";
+          modelNameEl.classList.remove("connected");
+        } else if (state === "connecting") {
+          connText.textContent = "Connecting...";
+          connectBtn.textContent = "Connecting...";
+          connectBtn.disabled = true;
+          connError.style.display = "none";
+        } else if (state === "connected") {
+          connText.textContent = msg || "Connected";
+          connectBtn.textContent = "Reconnect";
+          connectBtn.disabled = false;
+          connError.style.display = "none";
+          modelNameEl.classList.add("connected");
+        } else if (state === "error") {
+          connText.textContent = "Connection failed";
+          connectBtn.textContent = "Try again";
+          connectBtn.disabled = false;
+          connError.textContent = msg || "Could not reach Ollama. Check the URL and try again.";
+          connError.style.display = "block";
+          modelNameEl.textContent = "connection error";
+          modelNameEl.classList.remove("connected");
+          // Auto-open dropdown on error so user sees what happened
+          modelDropdown.classList.add("open");
+        }
+      }
+
+      function renderModelList() {
+        modelListEl.innerHTML = "";
+        if (models.length === 0) {
+          modelListEl.innerHTML = '<div class="dropdown-empty">No models available</div>';
+          return;
+        }
+        models.forEach((name) => {
+          const item = document.createElement("button");
+          item.className = "model-item" + (name === selectedModel ? " active" : "");
+          item.innerHTML = `<span class="model-item-name">${name}</span>` +
+            (name === selectedModel ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '');
+          item.addEventListener("click", () => {
+            selectedModel = name;
+            localStorage.setItem("openbird-model", name);
+            modelNameEl.textContent = name;
+            renderModelList();
+            modelDropdown.classList.remove("open");
+          });
+          modelListEl.appendChild(item);
+        });
+      }
+
+      // --- Load models ---
+      async function loadModels() {
+        setConnState("connecting");
+        try {
+          const host = getHost();
+          if (host) localStorage.setItem("openbird-host", host);
+          else localStorage.removeItem("openbird-host");
+          const url = host
+            ? `/api/models?host=${encodeURIComponent(host)}`
+            : "/api/models";
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          models = data.models;
+          const saved = localStorage.getItem("openbird-model");
+          selectedModel = (saved && models.includes(saved)) ? saved : models[0] || null;
+          if (selectedModel) {
+            modelNameEl.textContent = selectedModel;
+            localStorage.setItem("openbird-model", selectedModel);
           }
-          break;
+          renderModelList();
+          setConnState("connected", `Connected — ${models.length} model(s)`);
+          statusEl.textContent = "";
+        } catch (e) {
+          models = [];
+          renderModelList();
+          setConnState("error", e.message || "Could not reach Ollama. Check the URL and try again.");
+        }
+      }
 
-        case "ai_done":
-          if (timerInterval) clearInterval(timerInterval);
-          if (timerEl && stepStartTime) {
-            timerEl.textContent = `${((performance.now() - stepStartTime) / 1000).toFixed(1)}s`;
-          }
-          // Re-render with explanation only (commands stripped)
-          if (currentStepBody) {
-            const explanation = event.explanation || "";
-            if (explanation) {
-              currentStepBody.className = "md-body";
-              currentStepBody.innerHTML = renderMd(explanation);
-            } else {
-              // No explanation text — remove empty body
-              currentStepBody.remove();
-            }
-          }
+      // --- Markdown + math rendering ---
+      function renderMd(text) {
+        const blocks = [];
+        const push = (display, tex) => {
+          blocks.push({ display, tex: tex.trim() });
+          return `\x00MATH${blocks.length - 1}\x00`;
+        };
+        let s = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => push(true, m));
+        s = s.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => push(true, m));
+        s = s.replace(/\$([^\$\n]+?)\$/g, (_, m) => push(false, m));
+        s = s.replace(/\\\((.+?)\\\)/g, (_, m) => push(false, m));
 
-          if ((event.toolCalls || []).length > 0) {
-            setPhase("running", "Executing...");
-          } else {
-            setPhase("done", "Complete");
-          }
+        let html = marked.parse(s);
 
-          // Show metrics
-          if (event.metrics && msgDiv) {
-            const metricsEl = document.createElement("div");
-            metricsEl.className = "metrics";
-            const parts = [];
-            const m = event.metrics;
-            if (m.eval_count != null) parts.push(`${m.eval_count} tokens`);
-            if (m.eval_count && m.eval_duration) parts.push(`${(m.eval_count / (m.eval_duration / 1e9)).toFixed(1)} tok/s`);
-            if (m.prompt_eval_count != null) parts.push(`${m.prompt_eval_count} prompt tokens`);
-            if (m.total_duration) parts.push(`${(m.total_duration / 1e9).toFixed(2)}s total`);
-            metricsEl.textContent = parts.join(" · ");
-            appendToMsg(metricsEl);
-          }
-
-          // Render tool call blocks (after metrics, at bottom of step)
-          for (const call of (event.toolCalls || [])) {
-            const block = document.createElement("div");
-            block.className = "command-block collapsed";
-            block.dataset.toolName = call.name;
-
-            const header = document.createElement("div");
-            header.className = "command-header";
-            // Show the command inline in the header for bash
-            const cmdText = call.name === "bash" ? (call.params.command || call.name) : call.name;
-            const cmdLabel = document.createElement("span");
-            cmdLabel.className = "command-label";
-            cmdLabel.textContent = cmdText;
-            header.appendChild(cmdLabel);
-
-            const chevron = document.createElement("span");
-            chevron.className = "command-chevron";
-            chevron.textContent = "\u25B6";
-            header.appendChild(chevron);
-
-            // Click header to toggle output visibility
-            header.addEventListener("click", () => {
-              block.classList.toggle("collapsed");
-              chevron.textContent = block.classList.contains("collapsed") ? "\u25B6" : "\u25BC";
+        html = html.replace(/\x00MATH(\d+)\x00/g, (_, i) => {
+          const { display, tex } = blocks[Number(i)];
+          try {
+            return katex.renderToString(tex, {
+              displayMode: display,
+              throwOnError: false,
             });
-
-            block.appendChild(header);
-            appendToMsg(block);
+          } catch {
+            return tex;
           }
-          chatEl.scrollTop = chatEl.scrollHeight;
-          break;
+        });
+        return html;
+      }
 
-        case "tool_start": {
-          const label = event.name === "bash"
-            ? (event.params.command || "").slice(0, 40)
-            : event.name;
-          updateStatusBar(event.iteration || "?", label + (label.length >= 40 ? "..." : ""));
-          // Find the matching block by tool name
-          const blocks = msgDiv.querySelectorAll(`.command-block[data-tool-name="${event.name}"]`);
-          currentCmdBlock = blocks.length > 0 ? blocks[blocks.length - 1] : null;
-          if (currentCmdBlock && !currentCmdBlock.classList.contains("executing")) {
-            currentCmdBlock.classList.add("executing");
-            currentCmdOutput = document.createElement("div");
-            currentCmdOutput.className = "command-output";
-            currentCmdBlock.appendChild(currentCmdOutput);
-          }
-          break;
+      // --- Render a chat bubble ---
+      function addMessage(role, text) {
+        const empty = document.getElementById("empty");
+        if (empty) empty.remove();
+
+        const div = document.createElement("div");
+        div.className = `message ${role}`;
+
+        const label = document.createElement("div");
+        label.className = "role";
+        label.textContent = role === "user" ? "you" : "bird";
+        div.appendChild(label);
+
+        const body = document.createElement("div");
+        if (role === "assistant") {
+          body.className = "md-body";
+          body.innerHTML = text ? renderMd(text) : "";
+        } else {
+          body.textContent = text;
+        }
+        div.appendChild(body);
+
+        let metricsEl = null;
+        if (role === "assistant") {
+          metricsEl = document.createElement("div");
+          metricsEl.className = "metrics";
+          div.appendChild(metricsEl);
         }
 
-        case "tool_output":
-          if (currentCmdOutput) {
-            if (event.stream === "stderr") {
-              const span = document.createElement("span");
-              span.className = "stderr";
-              span.textContent = event.data;
-              currentCmdOutput.appendChild(span);
-            } else {
-              currentCmdOutput.textContent += event.data;
-            }
-            chatEl.scrollTop = chatEl.scrollHeight;
-          }
-          break;
+        chatEl.appendChild(div);
+        chatEl.scrollTop = chatEl.scrollHeight;
+        return { container: div, body, metricsEl };
+      }
 
-        case "tool_done": {
-          if (currentCmdBlock) {
-            currentCmdBlock.classList.remove("executing");
-            const result = event.result || {};
-            const isSuccess = result.exitCode === 0 || (!result.error && result.exitCode == null);
-            currentCmdBlock.classList.add(isSuccess ? "cmd-success" : "cmd-failure");
-            const hdr = currentCmdBlock.querySelector(".command-header");
-            if (hdr) {
-              const resultEl = document.createElement("span");
-              resultEl.className = "command-result";
-              if (result.exitCode != null) {
-                resultEl.textContent = `exit ${result.exitCode}`;
-              } else if (result.error) {
-                resultEl.textContent = "error";
-              } else {
-                resultEl.textContent = "done";
-              }
-              resultEl.style.color = isSuccess ? "#27ae60" : "#e74c3c";
-              hdr.appendChild(resultEl);
-            }
-            // For non-bash tools, show result summary in output
-            if (currentCmdOutput && !currentCmdOutput.textContent && event.name !== "bash") {
-              if (result.content != null) {
-                currentCmdOutput.textContent = result.content.length > 2000
-                  ? result.content.slice(0, 2000) + "\n... (truncated)"
-                  : result.content;
-              } else if (result.error) {
-                currentCmdOutput.textContent = result.error;
-              } else if (result.written) {
-                currentCmdOutput.textContent = `Wrote ${result.bytes} bytes to ${result.path}`;
-              }
-            }
-            // If no output at all, remove empty area
-            if (currentCmdOutput && !currentCmdOutput.textContent.trim()) {
-              currentCmdOutput.remove();
-            }
-          }
-          const doneResult = event.result || {};
-          const doneSuccess = doneResult.exitCode === 0 || (!doneResult.error && doneResult.exitCode == null);
-          setPhase("done", doneSuccess ? `${event.name} succeeded` : `${event.name} failed`);
-          currentCmdBlock = null;
-          currentCmdOutput = null;
-          break;
+      // --- Send / Stop ---
+      function onSendBtn() {
+        if (currentEventSource) {
+          stopChat();
+          return;
         }
+        send();
+      }
 
-        case "status":
-          if (timerInterval) clearInterval(timerInterval);
-          if (event.status === "done" || event.status === "stopped" || event.status === "max_iterations") {
+      async function send() {
+        const text = inputEl.value.trim();
+        if (!text || generating) return;
+
+        generating = true;
+        inputEl.value = "";
+        autoResize();
+
+        addMessage("user", text);
+
+        sendBtn.textContent = "Stop";
+        sendBtn.classList.add("stop-mode");
+        await startChat(text);
+        sendBtn.textContent = "Send";
+        sendBtn.classList.remove("stop-mode");
+
+        generating = false;
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+
+      async function startChat(message) {
+        try {
+          const host = getHost();
+          const body = { model: selectedModel, message, host };
+          if (currentSessionId) {
+            body.sessionId = currentSessionId;
+          } else {
+            body.history = [...conversationHistory];
+          }
+
+          const res = await fetch("/api/chat/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          const sessionId = data.sessionId;
+          currentSessionId = sessionId;
+          localStorage.setItem("openbird-session", sessionId);
+
+          await listenToChat(sessionId);
+          await syncHistory(sessionId);
+        } catch (e) {
+          statusEl.textContent = "Error: " + e.message;
+        } finally {
+          generating = false;
+          sendBtn.disabled = false;
+          currentEventSource = null;
+        }
+      }
+
+      async function syncHistory(sessionId) {
+        if (!sessionId) return;
+        try {
+          const res = await fetch(`/api/chat/${sessionId}/status`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.messages && data.messages.length > 0) {
+            conversationHistory = data.messages;
+          }
+        } catch {}
+      }
+
+      function listenToChat(sessionId) {
+        return new Promise((resolve) => {
+          currentListenResolve = resolve;
+          const events = new EventSource(`/api/chat/${sessionId}/events`);
+          currentEventSource = events;
+
+          const msg = addMessage("assistant", "");
+          const body = msg.body;
+          const metricsEl = msg.metricsEl;
+          let rawText = "";
+          const startTime = performance.now();
+
+          // Show typing indicator until first chunk arrives
+          const typingEl = document.createElement("div");
+          typingEl.className = "typing-indicator";
+          typingEl.innerHTML = "<span></span><span></span><span></span>";
+          body.appendChild(typingEl);
+          currentTypingEl = typingEl;
+          currentMetricsEl = metricsEl;
+
+          events.onmessage = (e) => {
+            const event = JSON.parse(e.data);
+
+            switch (event.type) {
+              case "ai_chunk":
+                if (typingEl.parentNode) typingEl.remove();
+                rawText += event.content;
+                body.innerHTML = renderMd(rawText);
+                chatEl.scrollTop = chatEl.scrollHeight;
+                break;
+
+              case "ai_done":
+                if (event.metrics && metricsEl) {
+                  const parts = [];
+                  const m = event.metrics;
+                  if (m.eval_count != null)
+                    parts.push(`${m.eval_count} tokens`);
+                  if (m.eval_count && m.eval_duration)
+                    parts.push(
+                      `${(m.eval_count / (m.eval_duration / 1e9)).toFixed(1)} tok/s`,
+                    );
+                  if (m.prompt_eval_count != null)
+                    parts.push(`${m.prompt_eval_count} prompt tokens`);
+                  if (m.total_duration)
+                    parts.push(`${(m.total_duration / 1e9).toFixed(2)}s total`);
+                  metricsEl.textContent = parts.join(" · ");
+                }
+                break;
+
+              case "status":
+                if (event.status === "done" || event.status === "stopped") {
+                  events.close();
+                  currentEventSource = null;
+                  const elapsed = (
+                    (performance.now() - startTime) /
+                    1000
+                  ).toFixed(1);
+                  statusEl.textContent =
+                    event.status === "stopped"
+                      ? `Stopped (${elapsed}s)`
+                      : `Done (${elapsed}s)`;
+                  resolve();
+                }
+                break;
+
+              case "error":
+                events.close();
+                currentEventSource = null;
+                statusEl.textContent = "Error: " + event.message;
+                resolve();
+                break;
+            }
+          };
+
+          events.onerror = () => {
             events.close();
             currentEventSource = null;
-            const elapsed = ((performance.now() - agentStartTime) / 1000).toFixed(1);
-            if (event.status === "max_iterations") {
-              statusEl.textContent = `Agent stopped after max iterations (${elapsed}s)`;
-            } else if (event.status === "stopped") {
-              statusEl.textContent = `Agent stopped by user (${elapsed}s)`;
-            } else {
-              statusEl.textContent = `Agent completed (${elapsed}s)`;
-            }
-            if (event.status === "done") {
-              localStorage.removeItem("openbird-session");
-              currentSessionId = null;
-            }
+            statusEl.textContent = "Connection lost.";
             resolve();
-          }
-          break;
+          };
+        });
+      }
 
-        case "error":
-          if (timerInterval) clearInterval(timerInterval);
-          events.close();
+      function stopChat() {
+        if (currentSessionId) {
+          fetch(`/api/chat/${currentSessionId}/stop`, { method: "POST" });
+        }
+        if (currentEventSource) {
+          currentEventSource.close();
           currentEventSource = null;
-          statusEl.textContent = "Agent error: " + event.message;
-          resolve();
-          break;
+        }
+        if (currentTypingEl && currentTypingEl.parentNode) {
+          currentTypingEl.remove();
+        }
+        currentTypingEl = null;
+        if (currentMetricsEl) {
+          currentMetricsEl.textContent = "Stopped";
+        }
+        currentMetricsEl = null;
+        if (currentListenResolve) {
+          currentListenResolve();
+          currentListenResolve = null;
+        }
       }
-    };
 
-    events.onerror = () => {
-      if (timerInterval) clearInterval(timerInterval);
-      events.close();
-      currentEventSource = null;
-      statusEl.textContent = "Agent connection lost.";
-      resolve();
-    };
-  });
-}
-
-function stopServerAgent() {
-  if (currentSessionId) {
-    fetch(`/api/agent/${currentSessionId}/stop`, { method: "POST" });
-  }
-  if (currentEventSource) {
-    currentEventSource.close();
-    currentEventSource = null;
-  }
-}
-
-// --- Auto-resize textarea ---
-function autoResize() {
-  inputEl.style.height = "auto";
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + "px";
-}
-
-// --- Events ---
-sendBtn.addEventListener("click", onSendBtn);
-inputEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSendBtn(); }
-});
-inputEl.addEventListener("input", autoResize);
-clearBtn.addEventListener("click", () => {
-  chatEl.innerHTML = '<div class="empty-state" id="empty">Send a message to start chatting</div>';
-  statusEl.textContent = "";
-  conversationHistory = [];
-  currentSessionId = null;
-  localStorage.removeItem("openbird-session");
-});
-
-modelSel.addEventListener("change", () => {
-  localStorage.setItem("openbird-model", modelSel.value);
-});
-
-connectBtn.addEventListener("click", () => loadModels());
-disconnectBtn.addEventListener("click", () => {
-  disconnectBtn.style.display = "none";
-  connectBtn.style.display = "";
-  connectBtn.textContent = "Connect";
-  connectBtn.classList.remove("connected", "failed");
-  modelSel.innerHTML = "<option>not connected</option>";
-  statusEl.textContent = "";
-});
-hostInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); loadModels(); }
-});
-
-// --- Init ---
-loadModels();
-inputEl.focus();
-
-// Reconnect to active agent session on page load
-(async function reconnect() {
-  const savedSession = localStorage.getItem("openbird-session");
-  if (!savedSession) return;
-  try {
-    const res = await fetch(`/api/agent/${savedSession}/status`);
-    if (!res.ok) { localStorage.removeItem("openbird-session"); return; }
-    const data = await res.json();
-    if (data.status === "running") {
-      currentSessionId = savedSession;
-      generating = true;
-      sendBtn.textContent = "Stop";
-      sendBtn.classList.add("stop-mode");
-      statusEl.textContent = "Reconnecting to agent...";
-      // Rebuild conversation from server state
-      for (const msg of data.messages) {
-        addMessage(msg.role === "assistant" ? "assistant" : "user", msg.content);
+      // --- Auto-resize textarea ---
+      function autoResize() {
+        inputEl.style.height = "auto";
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + "px";
       }
-      await listenToAgent(savedSession);
-      sendBtn.textContent = "Send";
-      sendBtn.classList.remove("stop-mode");
-      generating = false;
-    } else {
-      localStorage.removeItem("openbird-session");
-    }
-  } catch {
-    localStorage.removeItem("openbird-session");
-  }
-})();
-</script>
-</body>
+
+      // --- Events ---
+      sendBtn.addEventListener("click", onSendBtn);
+      inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          onSendBtn();
+        }
+      });
+      inputEl.addEventListener("input", autoResize);
+      clearBtn.addEventListener("click", () => {
+        chatEl.innerHTML =
+          '<div class="empty-state" id="empty">Send a message to start chatting</div>';
+        statusEl.textContent = "";
+        conversationHistory = [];
+        currentSessionId = null;
+        localStorage.removeItem("openbird-session");
+      });
+
+      connectBtn.addEventListener("click", () => loadModels());
+      hostInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          loadModels();
+        }
+      });
+
+      // --- Init ---
+      loadModels();
+      inputEl.focus();
+
+      // Reconnect to active session on page load
+      (async function reconnect() {
+        const savedSession = localStorage.getItem("openbird-session");
+        if (!savedSession) return;
+        try {
+          const res = await fetch(`/api/chat/${savedSession}/status`);
+          if (!res.ok) {
+            localStorage.removeItem("openbird-session");
+            return;
+          }
+          const data = await res.json();
+          if (data.status === "running") {
+            currentSessionId = savedSession;
+            generating = true;
+            sendBtn.textContent = "Stop";
+            sendBtn.classList.add("stop-mode");
+            statusEl.textContent = "Reconnecting...";
+            for (const msg of data.messages) {
+              addMessage(
+                msg.role === "assistant" ? "assistant" : "user",
+                msg.content,
+              );
+            }
+            await listenToChat(savedSession);
+            sendBtn.textContent = "Send";
+            sendBtn.classList.remove("stop-mode");
+            generating = false;
+          } else {
+            localStorage.removeItem("openbird-session");
+          }
+        } catch {
+          localStorage.removeItem("openbird-session");
+        }
+      })();
+    </script>
+  </body>
 </html>

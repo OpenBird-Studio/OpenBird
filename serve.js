@@ -4,7 +4,7 @@ import "dotenv/config";
 import * as http from "node:http";
 import { handler as staticHandler } from "./routes/static.js";
 import { handler as modelsHandler } from "./routes/models.js";
-import { handler as agentHandler } from "./routes/agent.js";
+import { handler as chatHandler } from "./routes/chat.js";
 
 const PORT = process.env.PORT || 3000;
 
@@ -18,8 +18,8 @@ const server = http.createServer(async (req, res) => {
     return modelsHandler(req, res);
   }
 
-  if (req.url.startsWith("/api/agent")) {
-    return agentHandler(req, res);
+  if (req.url.startsWith("/api/chat")) {
+    return chatHandler(req, res);
   }
 
   res.writeHead(404);
