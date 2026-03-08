@@ -396,6 +396,71 @@ header {
 }
 .md-body hr { border: none; border-top: 1px solid #d4e6f1; margin: 12px 0; }
 
+/* --- Code block actions --- */
+.md-body pre {
+  position: relative;
+}
+.code-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.md-body pre:hover .code-actions { opacity: 1; }
+.copy-btn {
+  padding: 3px 10px;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #5a6b7a;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #d4e6f1;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.copy-btn:hover { background: #ffffff; color: #2c3e50; }
+
+/* --- Render iframe --- */
+.render-frame {
+  width: 100%;
+  min-height: 360px;
+  border: none;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+/* --- Fullscreen render --- */
+.render-fullscreen {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  background: #ffffff;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.render-fullscreen .render-frame {
+  min-height: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+.render-fullscreen .code-actions {
+  opacity: 1;
+  z-index: 10000;
+  top: 10px;
+  right: 10px;
+}
+body.has-fullscreen > *:not(script) {
+  /* Hide everything behind fullscreen overlay */
+}
+
 /* --- Typing indicator --- */
 .typing-indicator { display: flex; gap: 4px; padding: 4px 0; }
 .typing-indicator span {

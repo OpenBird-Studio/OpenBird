@@ -228,6 +228,98 @@
         return html;
       }
 
+      // --- Add copy/render buttons to code blocks ---
+      function isHtmlCode(text) {
+        return /<!doctype\s+html|<html[\s>]/i.test(text);
+      }
+
+      function addCopyButtons(container) {
+        container.querySelectorAll("pre").forEach((pre) => {
+          if (pre.querySelector(".code-actions")) return;
+
+          const code = pre.querySelector("code");
+          const codeText = code ? code.textContent : pre.textContent;
+
+          const actions = document.createElement("div");
+          actions.className = "code-actions";
+
+          // Copy button
+          const copyBtn = document.createElement("button");
+          copyBtn.className = "copy-btn";
+          copyBtn.textContent = "Copy";
+          copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(codeText);
+            copyBtn.textContent = "Copied!";
+            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+          });
+          actions.appendChild(copyBtn);
+
+          // Render button for HTML code blocks
+          if (isHtmlCode(codeText)) {
+            const renderBtn = document.createElement("button");
+            renderBtn.className = "copy-btn render-btn";
+            renderBtn.textContent = "Render";
+            const expandBtn = document.createElement("button");
+            expandBtn.className = "copy-btn expand-btn";
+            expandBtn.textContent = "Fullscreen";
+            expandBtn.style.display = "none";
+            let iframe = null;
+            let showing = false;
+            let fullscreen = false;
+
+            renderBtn.addEventListener("click", () => {
+              if (!showing) {
+                if (code) code.style.display = "none";
+                if (!iframe) {
+                  iframe = document.createElement("iframe");
+                  iframe.className = "render-frame";
+                  iframe.sandbox = "allow-scripts allow-same-origin";
+                  pre.appendChild(iframe);
+                  iframe.srcdoc = codeText;
+                }
+                iframe.style.display = "block";
+                expandBtn.style.display = "";
+                renderBtn.textContent = "Code";
+                showing = true;
+              } else {
+                // Exit fullscreen first if active
+                if (fullscreen) {
+                  pre.classList.remove("render-fullscreen");
+                  document.body.classList.remove("has-fullscreen");
+                  fullscreen = false;
+                  expandBtn.textContent = "Fullscreen";
+                }
+                if (code) code.style.display = "";
+                if (iframe) iframe.style.display = "none";
+                expandBtn.style.display = "none";
+                renderBtn.textContent = "Render";
+                showing = false;
+              }
+            });
+
+            expandBtn.addEventListener("click", () => {
+              if (!fullscreen) {
+                pre.classList.add("render-fullscreen");
+                document.body.classList.add("has-fullscreen");
+                expandBtn.textContent = "Exit";
+                fullscreen = true;
+              } else {
+                pre.classList.remove("render-fullscreen");
+                document.body.classList.remove("has-fullscreen");
+                expandBtn.textContent = "Fullscreen";
+                fullscreen = false;
+              }
+            });
+
+            actions.appendChild(renderBtn);
+            actions.appendChild(expandBtn);
+          }
+
+          pre.style.position = "relative";
+          pre.appendChild(actions);
+        });
+      }
+
       // --- Render a chat bubble ---
       function addMessage(role, text) {
         const empty = document.getElementById("empty");
@@ -245,6 +337,7 @@
         if (role === "assistant") {
           body.className = "md-body";
           body.innerHTML = text ? renderMd(text) : "";
+          if (text) addCopyButtons(body);
         } else {
           body.textContent = text;
         }
@@ -363,6 +456,7 @@
                 if (typingEl.parentNode) typingEl.remove();
                 rawText += event.content;
                 body.innerHTML = renderMd(rawText);
+                addCopyButtons(body);
                 chatEl.scrollTop = chatEl.scrollHeight;
                 break;
 
