@@ -2,27 +2,37 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-    />
-    <title>Bird</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>OpenBird Studio</title>
     <link rel="icon" type="image/png" href="/bird.png" />
     <link rel="stylesheet" href="/style.css" />
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
-    />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   </head>
   <body>
+
+    <!-- ===== TOP NAV ===== -->
     <header>
       <div class="header-left">
+        <div class="logo">
+          <svg class="logo-icon" width="28" height="28" viewBox="0 0 100 100" fill="none">
+            <circle cx="50" cy="50" r="46" fill="url(#logoGrad)" />
+            <path d="M30 55 Q35 30 55 28 Q70 27 72 40 Q74 50 65 52 L60 53 Q68 58 66 68 Q64 78 50 78 Q36 78 30 65 Z" fill="#0a0a0f"/>
+            <circle cx="60" cy="40" r="4" fill="#a78bfa"/>
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="100" y2="100">
+                <stop offset="0%" stop-color="#a78bfa"/>
+                <stop offset="100%" stop-color="#6d28d9"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <span class="logo-text">OpenBird<span class="logo-accent">Studio</span></span>
+        </div>
         <button id="model-trigger" class="model-trigger">
-          <span class="brand">Bird</span>
+          <span class="conn-dot-mini" id="conn-dot-mini"></span>
           <span class="model-name" id="model-name">not connected</span>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div id="model-dropdown" class="model-dropdown">
           <div class="dropdown-section" id="model-list">
@@ -35,12 +45,7 @@
               <span id="conn-text">Not connected</span>
             </div>
             <div class="conn-url-row">
-              <input
-                id="host-input"
-                type="text"
-                placeholder="https://your-ollama-url..."
-                spellcheck="false"
-              />
+              <input id="host-input" type="text" placeholder="https://your-ollama-url..." spellcheck="false" />
             </div>
             <div class="conn-actions">
               <button id="connect-btn" class="conn-btn">Connect</button>
@@ -50,27 +55,116 @@
         </div>
       </div>
       <div class="header-right">
-        <button id="clear-btn" class="icon-btn" title="New chat">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3.75V14.25M3.75 9H14.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <button id="clear-btn" class="icon-btn" title="New project">
+          <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M9 3.75V14.25M3.75 9H14.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
       </div>
     </header>
 
-    <div id="chat">
-      <div class="empty-state" id="empty">Send a message to start chatting</div>
-    </div>
+    <!-- ===== MAIN SPLIT PANE ===== -->
+    <main id="main">
 
-    <div id="status"></div>
+      <!-- LEFT: Chat Panel -->
+      <div id="chat-panel" class="panel">
+        <div id="chat">
+          <!-- Empty state with templates -->
+          <div class="empty-state" id="empty">
+            <div class="empty-hero">
+              <div class="hero-glow"></div>
+              <h1>What do you want to build?</h1>
+              <p class="hero-sub">Describe any app, game, or website. OpenBird builds it instantly.</p>
+            </div>
+            <div class="templates" id="templates">
+              <button class="template-card" data-prompt="Build a snake game with neon colors, score tracking, and increasing difficulty. Make it visually stunning with particle effects.">
+                <span class="template-icon">&#127918;</span>
+                <span class="template-label">Snake Game</span>
+                <span class="template-desc">Neon arcade classic</span>
+              </button>
+              <button class="template-card" data-prompt="Build a beautiful pomodoro timer with ambient sounds, session tracking, a circular progress ring, and dark mode. Include motivational quotes that change each session.">
+                <span class="template-icon">&#9202;</span>
+                <span class="template-label">Pomodoro Timer</span>
+                <span class="template-desc">Focus & productivity</span>
+              </button>
+              <button class="template-card" data-prompt="Build a personal finance dashboard with interactive charts showing income vs expenses, a budget tracker, recent transactions list, and savings goals with progress bars. Use a clean, modern dark design.">
+                <span class="template-icon">&#128200;</span>
+                <span class="template-label">Finance Dashboard</span>
+                <span class="template-desc">Charts & analytics</span>
+              </button>
+              <button class="template-card" data-prompt="Build a beautiful weather app that shows current conditions with animated weather icons, 5-day forecast, humidity, wind speed, and a gorgeous gradient background that changes based on weather conditions.">
+                <span class="template-icon">&#9925;</span>
+                <span class="template-label">Weather App</span>
+                <span class="template-desc">Animated & beautiful</span>
+              </button>
+              <button class="template-card" data-prompt="Build a modern landing page for an AI startup called 'NeuralFlow'. Include a hero section with animated gradient background, features grid, pricing table with 3 tiers, testimonials carousel, and a CTA section. Make it look premium.">
+                <span class="template-icon">&#128640;</span>
+                <span class="template-label">Landing Page</span>
+                <span class="template-desc">Startup-ready design</span>
+              </button>
+              <button class="template-card" data-prompt="Build a fun interactive quiz game with 10 questions about random trivia. Include a progress bar, score counter, animated transitions between questions, and a results screen with a shareable score card.">
+                <span class="template-icon">&#129504;</span>
+                <span class="template-label">Quiz Game</span>
+                <span class="template-desc">Interactive trivia</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
-    <div id="input-bar">
-      <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
-      <button id="send-btn">Send</button>
-    </div>
+        <div id="status"></div>
+
+        <div id="input-bar">
+          <div class="input-wrap">
+            <textarea id="input" rows="1" placeholder="Describe what you want to build..."></textarea>
+            <button id="send-btn" title="Send">
+              <svg id="send-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg id="stop-icon" style="display:none" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            </button>
+          </div>
+          <div class="input-hint">Press Enter to send, Shift+Enter for new line</div>
+        </div>
+      </div>
+
+      <!-- RESIZE HANDLE -->
+      <div id="resize-handle" class="resize-handle">
+        <div class="resize-line"></div>
+      </div>
+
+      <!-- RIGHT: Preview Panel -->
+      <div id="preview-panel" class="panel preview-panel">
+        <div class="preview-toolbar" id="preview-toolbar">
+          <div class="preview-tabs">
+            <button class="preview-tab active" id="tab-preview" data-tab="preview">Preview</button>
+            <button class="preview-tab" id="tab-code" data-tab="code">Code</button>
+          </div>
+          <div class="preview-actions">
+            <button class="action-btn" id="download-btn" title="Download HTML">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Download</span>
+            </button>
+            <button class="action-btn" id="fullscreen-btn" title="Fullscreen">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="preview-content" id="preview-content">
+          <div class="preview-empty" id="preview-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span>Your app will appear here</span>
+          </div>
+          <iframe id="preview-frame" class="preview-frame" sandbox="allow-scripts" style="display:none"></iframe>
+          <div id="code-view" class="code-view" style="display:none">
+            <pre><code id="code-content"></code></pre>
+          </div>
+        </div>
+      </div>
+    </main>
 
     <script>
+      // ===== DOM refs =====
       const chatEl = document.getElementById("chat");
       const inputEl = document.getElementById("input");
       const sendBtn = document.getElementById("send-btn");
+      const sendIcon = document.getElementById("send-icon");
+      const stopIcon = document.getElementById("stop-icon");
       const clearBtn = document.getElementById("clear-btn");
       const hostInput = document.getElementById("host-input");
       const connectBtn = document.getElementById("connect-btn");
@@ -79,11 +173,24 @@
       const modelDropdown = document.getElementById("model-dropdown");
       const modelNameEl = document.getElementById("model-name");
       const modelListEl = document.getElementById("model-list");
-      const connStatus = document.getElementById("conn-status");
       const connDot = document.getElementById("conn-dot");
+      const connDotMini = document.getElementById("conn-dot-mini");
       const connText = document.getElementById("conn-text");
       const connError = document.getElementById("conn-error");
+      const previewFrame = document.getElementById("preview-frame");
+      const previewEmpty = document.getElementById("preview-empty");
+      const previewToolbar = document.getElementById("preview-toolbar");
+      const codeView = document.getElementById("code-view");
+      const codeContent = document.getElementById("code-content");
+      const tabPreview = document.getElementById("tab-preview");
+      const tabCode = document.getElementById("tab-code");
+      const downloadBtn = document.getElementById("download-btn");
+      const fullscreenBtn = document.getElementById("fullscreen-btn");
+      const resizeHandle = document.getElementById("resize-handle");
+      const chatPanel = document.getElementById("chat-panel");
+      const previewPanel = document.getElementById("preview-panel");
 
+      // ===== State =====
       const savedHost = localStorage.getItem("openbird-host");
       if (savedHost) hostInput.value = savedHost;
 
@@ -101,9 +208,11 @@
       let currentListenResolve = null;
       let models = [];
       let selectedModel = null;
-      let connState = "disconnected"; // disconnected | connecting | connected | error
+      let connState = "disconnected";
+      let lastGeneratedHtml = null;
+      let activeTab = "preview";
 
-      // --- Dropdown toggle ---
+      // ===== Dropdown toggle =====
       modelTrigger.addEventListener("click", (e) => {
         e.stopPropagation();
         modelDropdown.classList.toggle("open");
@@ -114,10 +223,11 @@
         }
       });
 
-      // --- Connection state UI ---
+      // ===== Connection state UI =====
       function setConnState(state, msg) {
         connState = state;
         connDot.className = "conn-dot " + state;
+        connDotMini.className = "conn-dot-mini " + state;
         if (state === "disconnected") {
           connText.textContent = msg || "Not connected";
           connectBtn.textContent = "Connect";
@@ -140,11 +250,10 @@
           connText.textContent = "Connection failed";
           connectBtn.textContent = "Try again";
           connectBtn.disabled = false;
-          connError.textContent = msg || "Could not reach Ollama. Check the URL and try again.";
+          connError.textContent = msg || "Could not reach Ollama.";
           connError.style.display = "block";
-          modelNameEl.textContent = "connection error";
+          modelNameEl.textContent = "error";
           modelNameEl.classList.remove("connected");
-          // Auto-open dropdown on error so user sees what happened
           modelDropdown.classList.add("open");
         }
       }
@@ -159,7 +268,7 @@
           const item = document.createElement("button");
           item.className = "model-item" + (name === selectedModel ? " active" : "");
           item.innerHTML = `<span class="model-item-name">${name}</span>` +
-            (name === selectedModel ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '');
+            (name === selectedModel ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '');
           item.addEventListener("click", () => {
             selectedModel = name;
             localStorage.setItem("openbird-model", name);
@@ -171,16 +280,14 @@
         });
       }
 
-      // --- Load models ---
+      // ===== Load models =====
       async function loadModels() {
         setConnState("connecting");
         try {
           const host = getHost();
           if (host) localStorage.setItem("openbird-host", host);
           else localStorage.removeItem("openbird-host");
-          const url = host
-            ? `/api/models?host=${encodeURIComponent(host)}`
-            : "/api/models";
+          const url = host ? `/api/models?host=${encodeURIComponent(host)}` : "/api/models";
           const res = await fetch(url);
           const data = await res.json();
           if (data.error) throw new Error(data.error);
@@ -197,11 +304,11 @@
         } catch (e) {
           models = [];
           renderModelList();
-          setConnState("error", e.message || "Could not reach Ollama. Check the URL and try again.");
+          setConnState("error", e.message || "Could not reach Ollama.");
         }
       }
 
-      // --- Markdown + math rendering ---
+      // ===== Markdown + math rendering =====
       function renderMd(text) {
         const blocks = [];
         const push = (display, tex) => {
@@ -212,151 +319,20 @@
         s = s.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => push(true, m));
         s = s.replace(/\$([^\$\n]+?)\$/g, (_, m) => push(false, m));
         s = s.replace(/\\\((.+?)\\\)/g, (_, m) => push(false, m));
-
         let html = marked.parse(s);
-
         html = html.replace(/\x00MATH(\d+)\x00/g, (_, i) => {
           const { display, tex } = blocks[Number(i)];
-          try {
-            return katex.renderToString(tex, {
-              displayMode: display,
-              throwOnError: false,
-            });
-          } catch {
-            return tex;
-          }
+          try { return katex.renderToString(tex, { displayMode: display, throwOnError: false }); }
+          catch { return tex; }
         });
         return html;
       }
 
-      // --- Add copy/render buttons to code blocks ---
+      // ===== HTML extraction =====
       function isHtmlCode(text) {
         return /<!doctype\s+html|<html[\s>]/i.test(text);
       }
 
-      function addCopyButtons(container) {
-        container.querySelectorAll("pre").forEach((pre) => {
-          if (pre.dataset.hasActions) return;
-          pre.dataset.hasActions = "1";
-
-          const code = pre.querySelector("code");
-          const codeText = code ? code.textContent : pre.textContent;
-
-          // Wrap pre in a container for layout control
-          const wrapper = document.createElement("div");
-          wrapper.className = "code-block";
-          pre.parentNode.insertBefore(wrapper, pre);
-          wrapper.appendChild(pre);
-
-          // Toolbar above the code
-          const toolbar = document.createElement("div");
-          toolbar.className = "code-toolbar";
-          wrapper.insertBefore(toolbar, pre);
-
-          // Copy button
-          const copyBtn = document.createElement("button");
-          copyBtn.className = "toolbar-btn";
-          copyBtn.textContent = "Copy";
-          copyBtn.addEventListener("click", () => {
-            navigator.clipboard.writeText(codeText);
-            copyBtn.textContent = "Copied!";
-            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
-          });
-          toolbar.appendChild(copyBtn);
-
-          // Render button for HTML code blocks
-          if (isHtmlCode(codeText)) {
-            const renderBtn = document.createElement("button");
-            renderBtn.className = "toolbar-btn";
-            renderBtn.textContent = "Render";
-            const expandBtn = document.createElement("button");
-            expandBtn.className = "toolbar-btn";
-            expandBtn.textContent = "Fullscreen";
-            expandBtn.style.display = "none";
-            let renderWrap = null;
-            let iframe = null;
-            let showing = false;
-            let fullscreen = false;
-
-            function scaleIframe() {
-              if (!renderWrap || !iframe || fullscreen) return;
-              const wrapW = renderWrap.clientWidth;
-              const scale = wrapW / 1024;
-              iframe.style.transform = `scale(${scale})`;
-              renderWrap.style.height = Math.round(768 * scale) + "px";
-            }
-
-            function reloadIframe() {
-              if (iframe) iframe.srcdoc = codeText;
-            }
-
-            const msgEl = wrapper.closest(".message");
-
-            renderBtn.addEventListener("click", () => {
-              if (!showing) {
-                pre.style.display = "none";
-                if (!iframe) {
-                  renderWrap = document.createElement("div");
-                  renderWrap.className = "render-wrap";
-                  iframe = document.createElement("iframe");
-                  iframe.className = "render-frame";
-                  iframe.sandbox = "allow-scripts";
-                  renderWrap.appendChild(iframe);
-                  wrapper.appendChild(renderWrap);
-                  iframe.srcdoc = codeText;
-                  window.addEventListener("resize", scaleIframe);
-                }
-                renderWrap.style.display = "";
-                expandBtn.style.display = "";
-                if (msgEl) msgEl.classList.add("has-render");
-                renderBtn.textContent = "Code";
-                showing = true;
-                requestAnimationFrame(scaleIframe);
-              } else {
-                if (fullscreen) {
-                  wrapper.classList.remove("render-fullscreen");
-                  document.body.classList.remove("has-fullscreen");
-                  fullscreen = false;
-                  expandBtn.textContent = "Fullscreen";
-                  requestAnimationFrame(scaleIframe);
-                }
-                pre.style.display = "";
-                if (renderWrap) renderWrap.style.display = "none";
-                expandBtn.style.display = "none";
-                if (msgEl) msgEl.classList.remove("has-render");
-                renderBtn.textContent = "Render";
-                showing = false;
-              }
-            });
-
-            expandBtn.addEventListener("click", () => {
-              if (!fullscreen) {
-                wrapper.classList.add("render-fullscreen");
-                document.body.classList.add("has-fullscreen");
-                expandBtn.textContent = "Exit";
-                fullscreen = true;
-                // Reload at full size so canvas/animations work properly
-                requestAnimationFrame(() => reloadIframe());
-              } else {
-                wrapper.classList.remove("render-fullscreen");
-                document.body.classList.remove("has-fullscreen");
-                expandBtn.textContent = "Fullscreen";
-                fullscreen = false;
-                // Reload at scaled size
-                requestAnimationFrame(() => {
-                  scaleIframe();
-                  reloadIframe();
-                });
-              }
-            });
-
-            toolbar.appendChild(renderBtn);
-            toolbar.appendChild(expandBtn);
-          }
-        });
-      }
-
-      // --- Extract HTML from AI response ---
       function extractHtml(text) {
         const fenceMatch = text.match(/```(?:html)?\s*\n([\s\S]*?)```/);
         if (fenceMatch) return fenceMatch[1].trim();
@@ -364,117 +340,127 @@
         return null;
       }
 
-      // --- Render final result (render-first for HTML) ---
+      // ===== Preview panel =====
+      function showPreview(html) {
+        lastGeneratedHtml = html;
+        previewEmpty.style.display = "none";
+        previewFrame.style.display = "";
+        previewFrame.srcdoc = html;
+        codeContent.textContent = html;
+        previewToolbar.classList.add("has-content");
+        if (activeTab === "code") {
+          previewFrame.style.display = "none";
+          codeView.style.display = "";
+        }
+      }
+
+      function clearPreview() {
+        lastGeneratedHtml = null;
+        previewEmpty.style.display = "";
+        previewFrame.style.display = "none";
+        previewFrame.srcdoc = "";
+        codeView.style.display = "none";
+        codeContent.textContent = "";
+        previewToolbar.classList.remove("has-content");
+        activeTab = "preview";
+        tabPreview.classList.add("active");
+        tabCode.classList.remove("active");
+      }
+
+      // Tab switching
+      tabPreview.addEventListener("click", () => {
+        activeTab = "preview";
+        tabPreview.classList.add("active");
+        tabCode.classList.remove("active");
+        if (lastGeneratedHtml) {
+          previewFrame.style.display = "";
+          codeView.style.display = "none";
+        }
+      });
+      tabCode.addEventListener("click", () => {
+        activeTab = "code";
+        tabCode.classList.add("active");
+        tabPreview.classList.remove("active");
+        previewFrame.style.display = "none";
+        codeView.style.display = "";
+      });
+
+      // Download
+      downloadBtn.addEventListener("click", () => {
+        if (!lastGeneratedHtml) return;
+        const blob = new Blob([lastGeneratedHtml], { type: "text/html" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "openbird-app.html";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+
+      // Fullscreen
+      let isFullscreen = false;
+      fullscreenBtn.addEventListener("click", () => {
+        if (!isFullscreen) {
+          previewPanel.classList.add("fullscreen");
+          document.body.classList.add("has-fullscreen");
+          isFullscreen = true;
+        } else {
+          previewPanel.classList.remove("fullscreen");
+          document.body.classList.remove("has-fullscreen");
+          isFullscreen = false;
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && isFullscreen) {
+          previewPanel.classList.remove("fullscreen");
+          document.body.classList.remove("has-fullscreen");
+          isFullscreen = false;
+        }
+      });
+
+      // ===== Resize handle =====
+      let isResizing = false;
+      resizeHandle.addEventListener("mousedown", (e) => {
+        isResizing = true;
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        e.preventDefault();
+      });
+      document.addEventListener("mousemove", (e) => {
+        if (!isResizing) return;
+        const mainEl = document.getElementById("main");
+        const rect = mainEl.getBoundingClientRect();
+        const pct = ((e.clientX - rect.left) / rect.width) * 100;
+        const clamped = Math.min(Math.max(pct, 25), 75);
+        chatPanel.style.flex = `0 0 ${clamped}%`;
+        previewPanel.style.flex = `0 0 ${100 - clamped}%`;
+      });
+      document.addEventListener("mouseup", () => {
+        if (isResizing) {
+          isResizing = false;
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+        }
+      });
+
+      // ===== Render final result =====
       function renderFinalResult(body, rawText) {
         const html = extractHtml(rawText);
         const msgEl = body.closest(".message");
 
         if (html) {
-          msgEl.classList.add("has-render");
-          body.innerHTML = "";
-
-          const wrapper = document.createElement("div");
-          wrapper.className = "code-block";
-
-          const toolbar = document.createElement("div");
-          toolbar.className = "code-toolbar";
-
-          const copyBtn = document.createElement("button");
-          copyBtn.className = "toolbar-btn";
-          copyBtn.textContent = "Copy";
-          copyBtn.addEventListener("click", () => {
-            navigator.clipboard.writeText(html);
-            copyBtn.textContent = "Copied!";
-            setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
-          });
-
-          const codeBtn = document.createElement("button");
-          codeBtn.className = "toolbar-btn";
-          codeBtn.textContent = "Code";
-
-          const expandBtn = document.createElement("button");
-          expandBtn.className = "toolbar-btn";
-          expandBtn.textContent = "Fullscreen";
-
-          toolbar.appendChild(copyBtn);
-          toolbar.appendChild(codeBtn);
-          toolbar.appendChild(expandBtn);
-
-          const pre = document.createElement("pre");
-          pre.style.display = "none";
-          const code = document.createElement("code");
-          code.textContent = html;
-          pre.appendChild(code);
-
-          const renderWrap = document.createElement("div");
-          renderWrap.className = "render-wrap";
-          const iframe = document.createElement("iframe");
-          iframe.className = "render-frame";
-          iframe.sandbox = "allow-scripts";
-          iframe.srcdoc = html;
-          renderWrap.appendChild(iframe);
-
-          wrapper.appendChild(toolbar);
-          wrapper.appendChild(pre);
-          wrapper.appendChild(renderWrap);
-          body.appendChild(wrapper);
-
-          let showingCode = false;
-          let fullscreen = false;
-
-          function scaleIframe() {
-            if (fullscreen) return;
-            const wrapW = renderWrap.clientWidth;
-            const scale = wrapW / 1024;
-            iframe.style.transform = `scale(${scale})`;
-            renderWrap.style.height = Math.round(768 * scale) + "px";
-          }
-
-          codeBtn.addEventListener("click", () => {
-            if (!showingCode) {
-              pre.style.display = "";
-              renderWrap.style.display = "none";
-              expandBtn.style.display = "none";
-              codeBtn.textContent = "Render";
-              showingCode = true;
-            } else {
-              pre.style.display = "none";
-              renderWrap.style.display = "";
-              expandBtn.style.display = "";
-              codeBtn.textContent = "Code";
-              showingCode = false;
-              requestAnimationFrame(scaleIframe);
-            }
-          });
-
-          expandBtn.addEventListener("click", () => {
-            if (!fullscreen) {
-              wrapper.classList.add("render-fullscreen");
-              document.body.classList.add("has-fullscreen");
-              expandBtn.textContent = "Exit";
-              fullscreen = true;
-              requestAnimationFrame(() => { iframe.srcdoc = html; });
-            } else {
-              wrapper.classList.remove("render-fullscreen");
-              document.body.classList.remove("has-fullscreen");
-              expandBtn.textContent = "Fullscreen";
-              fullscreen = false;
-              requestAnimationFrame(() => { scaleIframe(); iframe.srcdoc = html; });
-            }
-          });
-
-          window.addEventListener("resize", scaleIframe);
-          requestAnimationFrame(scaleIframe);
+          showPreview(html);
+          // In chat, show a compact success card
+          body.innerHTML = `<div class="build-success">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span>App built successfully — see preview</span>
+          </div>`;
         } else {
-          // Fallback to markdown for non-HTML responses
           body.innerHTML = renderMd(rawText);
-          addCopyButtons(body);
         }
-
         chatEl.scrollTop = chatEl.scrollHeight;
       }
 
-      // --- Render a chat bubble ---
+      // ===== Chat message rendering =====
       function addMessage(role, text) {
         const empty = document.getElementById("empty");
         if (empty) empty.remove();
@@ -482,17 +468,9 @@
         const div = document.createElement("div");
         div.className = `message ${role}`;
 
-        const label = document.createElement("div");
-        label.className = "role";
-        label.textContent = role === "user" ? "you" : "bird";
-        div.appendChild(label);
-
         const body = document.createElement("div");
-        if (role === "assistant") {
-          body.className = "md-body";
-        } else {
-          body.textContent = text;
-        }
+        body.className = role === "assistant" ? "md-body" : "user-body";
+        if (role === "user") body.textContent = text;
         div.appendChild(body);
 
         let metricsEl = null;
@@ -504,14 +482,16 @@
 
         chatEl.appendChild(div);
 
-        // Render assistant content after DOM insertion
         if (role === "assistant" && text) {
           const html = extractHtml(text);
           if (html) {
-            renderFinalResult(body, text);
+            showPreview(html);
+            body.innerHTML = `<div class="build-success">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <span>App built successfully — see preview</span>
+            </div>`;
           } else {
             body.innerHTML = renderMd(text);
-            addCopyButtons(body);
           }
         }
 
@@ -519,17 +499,26 @@
         return { container: div, body, metricsEl };
       }
 
-      // --- Send / Stop ---
-      function onSendBtn() {
-        if (currentEventSource) {
-          stopChat();
-          return;
+      // ===== Send / Stop =====
+      function setStopMode(on) {
+        if (on) {
+          sendIcon.style.display = "none";
+          stopIcon.style.display = "";
+          sendBtn.classList.add("stop-mode");
+        } else {
+          sendIcon.style.display = "";
+          stopIcon.style.display = "none";
+          sendBtn.classList.remove("stop-mode");
         }
+      }
+
+      function onSendBtn() {
+        if (currentEventSource) { stopChat(); return; }
         send();
       }
 
-      async function send() {
-        const text = inputEl.value.trim();
+      async function send(promptText) {
+        const text = promptText || inputEl.value.trim();
         if (!text || generating) return;
 
         generating = true;
@@ -537,15 +526,10 @@
         autoResize();
 
         addMessage("user", text);
-
-        sendBtn.textContent = "Stop";
-        sendBtn.classList.add("stop-mode");
+        setStopMode(true);
         await startChat(text);
-        sendBtn.textContent = "Send";
-        sendBtn.classList.remove("stop-mode");
-
+        setStopMode(false);
         generating = false;
-        sendBtn.disabled = false;
         inputEl.focus();
       }
 
@@ -565,17 +549,15 @@
             body: JSON.stringify(body),
           });
           const data = await res.json();
-          const sessionId = data.sessionId;
-          currentSessionId = sessionId;
-          localStorage.setItem("openbird-session", sessionId);
+          currentSessionId = data.sessionId;
+          localStorage.setItem("openbird-session", data.sessionId);
 
-          await listenToChat(sessionId);
-          await syncHistory(sessionId);
+          await listenToChat(data.sessionId);
+          await syncHistory(data.sessionId);
         } catch (e) {
           statusEl.textContent = "Error: " + e.message;
         } finally {
           generating = false;
-          sendBtn.disabled = false;
           currentEventSource = null;
         }
       }
@@ -602,11 +584,12 @@
           const body = msg.body;
           const metricsEl = msg.metricsEl;
           let rawText = "";
-          const startTime = performance.now();
 
           // Show loading state
-          body.innerHTML = '<div class="loading-state"><div class="loading-shimmer"><div class="shimmer-bar" style="width:70%"></div><div class="shimmer-bar" style="width:90%"></div><div class="shimmer-bar" style="width:50%"></div><div class="shimmer-bar" style="width:80%"></div><div class="shimmer-bar" style="width:60%"></div></div><div class="loading-text">Generating<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></div></div>';
-          msg.container.classList.add("has-render");
+          body.innerHTML = `<div class="generating-state">
+            <div class="gen-spinner"></div>
+            <span>Building your app...</span>
+          </div>`;
 
           currentBody = body;
           currentRawText = "";
@@ -614,13 +597,11 @@
 
           events.onmessage = (e) => {
             const event = JSON.parse(e.data);
-
             switch (event.type) {
               case "ai_chunk":
                 rawText += event.content;
                 currentRawText = rawText;
                 break;
-
               case "ai_done":
                 renderFinalResult(body, rawText);
                 currentBody = null;
@@ -628,50 +609,32 @@
                 if (event.metrics && metricsEl) {
                   const parts = [];
                   const m = event.metrics;
-                  if (m.eval_count != null)
-                    parts.push(`${m.eval_count} tokens`);
-                  if (m.eval_count && m.eval_duration)
-                    parts.push(
-                      `${(m.eval_count / (m.eval_duration / 1e9)).toFixed(1)} tok/s`,
-                    );
-                  if (m.prompt_eval_count != null)
-                    parts.push(`${m.prompt_eval_count} prompt tokens`);
-                  if (m.total_duration)
-                    parts.push(`${(m.total_duration / 1e9).toFixed(2)}s total`);
+                  if (m.eval_count != null) parts.push(`${m.eval_count} tokens`);
+                  if (m.eval_count && m.eval_duration) parts.push(`${(m.eval_count / (m.eval_duration / 1e9)).toFixed(1)} tok/s`);
+                  if (m.prompt_eval_count != null) parts.push(`${m.prompt_eval_count} prompt tokens`);
+                  if (m.total_duration) parts.push(`${(m.total_duration / 1e9).toFixed(2)}s`);
                   metricsEl.textContent = parts.join(" · ");
                 }
                 break;
-
               case "status":
                 if (event.status === "done" || event.status === "stopped") {
                   events.close();
                   currentEventSource = null;
-                  const elapsed = (
-                    (performance.now() - startTime) /
-                    1000
-                  ).toFixed(1);
-                  // If still showing loading state, render what we have
-                  if (body.querySelector(".loading-state") && rawText) {
+                  if (body.querySelector(".generating-state") && rawText) {
                     renderFinalResult(body, rawText);
                     currentBody = null;
                     currentRawText = "";
-                  } else if (body.querySelector(".loading-state")) {
-                    body.innerHTML = '<div style="color:#8899a6;padding:12px">Stopped</div>';
+                  } else if (body.querySelector(".generating-state")) {
+                    body.innerHTML = '<div class="stopped-msg">Stopped</div>';
                   }
-                  statusEl.textContent =
-                    event.status === "stopped"
-                      ? `Stopped (${elapsed}s)`
-                      : `Done (${elapsed}s)`;
+                  statusEl.textContent = "";
                   resolve();
                 }
                 break;
-
               case "error":
                 events.close();
                 currentEventSource = null;
-                body.innerHTML = "";
-                body.textContent = "Error: " + event.message;
-                statusEl.textContent = "Error: " + event.message;
+                body.innerHTML = `<div class="error-msg">${event.message}</div>`;
                 currentBody = null;
                 currentRawText = "";
                 resolve();
@@ -682,7 +645,6 @@
           events.onerror = () => {
             events.close();
             currentEventSource = null;
-            statusEl.textContent = "Connection lost.";
             currentBody = null;
             currentRawText = "";
             resolve();
@@ -698,93 +660,123 @@
           currentEventSource.close();
           currentEventSource = null;
         }
-        // Render whatever we have so far
         if (currentBody && currentRawText) {
           renderFinalResult(currentBody, currentRawText);
         } else if (currentBody) {
-          currentBody.innerHTML = '<div style="color:#8899a6;padding:12px">Stopped</div>';
+          currentBody.innerHTML = '<div class="stopped-msg">Stopped</div>';
         }
         currentBody = null;
         currentRawText = "";
-        if (currentMetricsEl) {
-          currentMetricsEl.textContent = "Stopped";
-        }
+        if (currentMetricsEl) currentMetricsEl.textContent = "Stopped";
         currentMetricsEl = null;
-        if (currentListenResolve) {
-          currentListenResolve();
-          currentListenResolve = null;
-        }
+        if (currentListenResolve) { currentListenResolve(); currentListenResolve = null; }
       }
 
-      // --- Auto-resize textarea ---
+      // ===== Auto-resize textarea =====
       function autoResize() {
         inputEl.style.height = "auto";
         inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + "px";
       }
 
-      // --- Events ---
+      // ===== Template cards =====
+      document.getElementById("templates").addEventListener("click", (e) => {
+        const card = e.target.closest(".template-card");
+        if (!card) return;
+        const prompt = card.dataset.prompt;
+        if (prompt) send(prompt);
+      });
+
+      // ===== Events =====
       sendBtn.addEventListener("click", onSendBtn);
       inputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          onSendBtn();
-        }
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSendBtn(); }
       });
       inputEl.addEventListener("input", autoResize);
       clearBtn.addEventListener("click", () => {
-        chatEl.innerHTML =
-          '<div class="empty-state" id="empty">Send a message to start chatting</div>';
+        chatEl.innerHTML = "";
+        // Re-add empty state
+        chatEl.innerHTML = `<div class="empty-state" id="empty">
+          <div class="empty-hero">
+            <div class="hero-glow"></div>
+            <h1>What do you want to build?</h1>
+            <p class="hero-sub">Describe any app, game, or website. OpenBird builds it instantly.</p>
+          </div>
+          <div class="templates" id="templates">
+            <button class="template-card" data-prompt="Build a snake game with neon colors, score tracking, and increasing difficulty. Make it visually stunning with particle effects.">
+              <span class="template-icon">&#127918;</span>
+              <span class="template-label">Snake Game</span>
+              <span class="template-desc">Neon arcade classic</span>
+            </button>
+            <button class="template-card" data-prompt="Build a beautiful pomodoro timer with ambient sounds, session tracking, a circular progress ring, and dark mode. Include motivational quotes that change each session.">
+              <span class="template-icon">&#9202;</span>
+              <span class="template-label">Pomodoro Timer</span>
+              <span class="template-desc">Focus & productivity</span>
+            </button>
+            <button class="template-card" data-prompt="Build a personal finance dashboard with interactive charts showing income vs expenses, a budget tracker, recent transactions list, and savings goals with progress bars. Use a clean, modern dark design.">
+              <span class="template-icon">&#128200;</span>
+              <span class="template-label">Finance Dashboard</span>
+              <span class="template-desc">Charts & analytics</span>
+            </button>
+            <button class="template-card" data-prompt="Build a beautiful weather app that shows current conditions with animated weather icons, 5-day forecast, humidity, wind speed, and a gorgeous gradient background that changes based on weather conditions.">
+              <span class="template-icon">&#9925;</span>
+              <span class="template-label">Weather App</span>
+              <span class="template-desc">Animated & beautiful</span>
+            </button>
+            <button class="template-card" data-prompt="Build a modern landing page for an AI startup called 'NeuralFlow'. Include a hero section with animated gradient background, features grid, pricing table with 3 tiers, testimonials carousel, and a CTA section. Make it look premium.">
+              <span class="template-icon">&#128640;</span>
+              <span class="template-label">Landing Page</span>
+              <span class="template-desc">Startup-ready design</span>
+            </button>
+            <button class="template-card" data-prompt="Build a fun interactive quiz game with 10 questions about random trivia. Include a progress bar, score counter, animated transitions between questions, and a results screen with a shareable score card.">
+              <span class="template-icon">&#129504;</span>
+              <span class="template-label">Quiz Game</span>
+              <span class="template-desc">Interactive trivia</span>
+            </button>
+          </div>
+        </div>`;
+        // Rebind template clicks
+        document.getElementById("templates").addEventListener("click", (e) => {
+          const card = e.target.closest(".template-card");
+          if (card && card.dataset.prompt) send(card.dataset.prompt);
+        });
         statusEl.textContent = "";
         conversationHistory = [];
         currentSessionId = null;
         localStorage.removeItem("openbird-session");
+        clearPreview();
       });
 
       connectBtn.addEventListener("click", () => loadModels());
       hostInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          loadModels();
-        }
+        if (e.key === "Enter") { e.preventDefault(); loadModels(); }
       });
 
-      // --- Init ---
+      // ===== Init =====
       loadModels();
       inputEl.focus();
 
-      // Reconnect to active session on page load
+      // Reconnect to active session
       (async function reconnect() {
         const savedSession = localStorage.getItem("openbird-session");
         if (!savedSession) return;
         try {
           const res = await fetch(`/api/chat/${savedSession}/status`);
-          if (!res.ok) {
-            localStorage.removeItem("openbird-session");
-            return;
-          }
+          if (!res.ok) { localStorage.removeItem("openbird-session"); return; }
           const data = await res.json();
           if (data.status === "running") {
             currentSessionId = savedSession;
             generating = true;
-            sendBtn.textContent = "Stop";
-            sendBtn.classList.add("stop-mode");
-            statusEl.textContent = "Reconnecting...";
+            setStopMode(true);
             for (const msg of data.messages) {
-              addMessage(
-                msg.role === "assistant" ? "assistant" : "user",
-                msg.content,
-              );
+              addMessage(msg.role === "assistant" ? "assistant" : "user", msg.content);
             }
             await listenToChat(savedSession);
-            sendBtn.textContent = "Send";
-            sendBtn.classList.remove("stop-mode");
+            setStopMode(false);
             generating = false;
           } else {
             localStorage.removeItem("openbird-session");
           }
-        } catch {
-          localStorage.removeItem("openbird-session");
-        }
+        } catch { localStorage.removeItem("openbird-session"); }
       })();
     </script>
   </body>

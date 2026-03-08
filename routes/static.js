@@ -12,6 +12,9 @@ const STATIC_TYPES = {
   ".gif": "image/gif",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  ".js": "application/javascript",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
 };
 
 export function handler(req, res) {

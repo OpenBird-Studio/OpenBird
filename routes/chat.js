@@ -82,7 +82,7 @@ export async function ollamaChat(model, messages, onChunk, host) {
 const SYSTEM_PROMPT = {
   role: "system",
   content:
-    "Return you answer in 1 html file with javascript and css. Tailwind is installed.",
+    "You are OpenBird Studio, an expert AI app builder. When the user describes an app, game, tool, or website, you MUST return a single, complete, self-contained HTML file that includes all HTML, CSS, and JavaScript inline. Use Tailwind CDN (https://cdn.tailwindcss.com) for styling. Make every app visually stunning with modern design, smooth animations, and beautiful color schemes. The output must be a complete HTML document starting with <!DOCTYPE html>. Never explain the code — just return the HTML file. If the user asks a question that doesn't require building an app, respond normally in markdown.",
 };
 
 const sessions = new Map();
